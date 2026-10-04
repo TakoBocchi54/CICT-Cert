@@ -1,10 +1,25 @@
+-- CICT-Cert schema (corrected)
+-- Re-runnable: drops existing tables first (safe while there is no data yet).
+
+DROP TABLE IF EXISTS blockchain_record CASCADE;
+DROP TABLE IF EXISTS certificate CASCADE;
+DROP TABLE IF EXISTS issuer_wallet CASCADE;
+DROP TABLE IF EXISTS student_wallet CASCADE;
+DROP TABLE IF EXISTS student CASCADE;
+DROP TABLE IF EXISTS cict_faculty CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
 CREATE TABLE users (
     "userID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "email" VARCHAR(255) NOT NULL UNIQUE,
-    "passwordHash" VARCHAR(255) NOT NULL,
+    -- Students log in through the embedded wallet, so they have no password.
+    "passwordHash" VARCHAR(255),
     "role" VARCHAR(20) NOT NULL
         CHECK ("role" IN ('FACULTY', 'STUDENT')),
-    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Faculty must always have a password.
+    CONSTRAINT chk_faculty_has_password
+        CHECK ("role" = 'STUDENT' OR "passwordHash" IS NOT NULL)
 );
 
 CREATE TABLE cict_faculty (
@@ -30,13 +45,15 @@ CREATE TABLE student (
 );
 
 CREATE TABLE student_wallet (
-    "walletID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "studentWalletID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "studentID" BIGINT NOT NULL UNIQUE,
     "studentWalletAddress" VARCHAR(42) NOT NULL UNIQUE,
     "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_student_wallet_student
         FOREIGN KEY ("studentID")
-        REFERENCES student ("studentID")
+        REFERENCES student ("studentID"),
+    CONSTRAINT uq_student_wallet_pair
+        UNIQUE ("studentID", "studentWalletID")
 );
 
 CREATE TABLE issuer_wallet (
@@ -45,15 +62,12 @@ CREATE TABLE issuer_wallet (
     "label" VARCHAR(100) NOT NULL,
     "network" VARCHAR(100) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
-    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_issuer_wallet_user
-        FOREIGN KEY ("userID")
-        REFERENCES users ("userID")
+    "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE certificate (
     "certificateID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "certificateNO" BIGINT NOT NULL UNIQUE,
+    "certificateNo" BIGINT NOT NULL UNIQUE,
     "studentID" BIGINT NOT NULL,
     "studentWalletID" BIGINT NOT NULL,
     "authorizedBy" BIGINT NOT NULL,
@@ -71,23 +85,17 @@ CREATE TABLE certificate (
         REFERENCES student ("studentID"),
     CONSTRAINT fk_certificate_wallet
         FOREIGN KEY ("studentWalletID")
-        REFERENCES student_wallet ("walletID"),
+        REFERENCES student_wallet ("studentWalletID"),
     CONSTRAINT fk_certificate_faculty
         FOREIGN KEY ("authorizedBy")
         REFERENCES cict_faculty ("facultyID"),
     CONSTRAINT fk_certificate_issuer_wallet
         FOREIGN KEY ("issuerWalletID")
-        REFERENCES issuer_wallet ("issuerWalletID")
+        REFERENCES issuer_wallet ("issuerWalletID"),
+    CONSTRAINT fk_certificate_student_wallet_match
+        FOREIGN KEY ("studentID", "studentWalletID")
+        REFERENCES student_wallet ("studentID", "studentWalletID")
 );
-
-ALTER TABLE student_wallet
-ADD CONSTRAINT uq_student_wallet_pair
-UNIQUE ("studentID", "walletID");
-
-ALTER TABLE certificate
-ADD CONSTRAINT fk_certificate_student_wallet_match
-FOREIGN KEY ("studentID", "studentWalletID")
-REFERENCES student_wallet ("studentID", "walletID");
 
 CREATE TABLE blockchain_record (
     "transactionID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -104,7 +112,6 @@ CREATE TABLE blockchain_record (
     "transactionStatus" VARCHAR(20) NOT NULL
         CHECK ("transactionStatus" IN ('PENDING', 'CONFIRMED', 'FAILED')),
     "issuedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "revokedAt" TIMESTAMP,
     CONSTRAINT fk_blockchain_certificate
         FOREIGN KEY ("certificateID")
         REFERENCES certificate ("certificateID")
