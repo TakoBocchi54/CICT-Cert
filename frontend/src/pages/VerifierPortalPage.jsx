@@ -54,7 +54,7 @@ export default function VerifierPortalPage({
   };
 
   const steps = [
-    'Locating credential in the CICT registry',
+    'Locating certificate in the CICT registry',
     'Reading token from Polygon',
     'Checking revocation list'
   ];
@@ -62,12 +62,12 @@ export default function VerifierPortalPage({
   const banner = {
     Verified: [
       '#0e5a37',
-      'This credential is valid',
+      'This certificate is valid',
       'Issued by CICT and confirmed on the blockchain.'
     ],
     Revoked: [
       '#97201a',
-      'This credential has been revoked',
+      'This certificate has been revoked',
       'The issuer has invalidated it. Do not rely on it.'
     ],
     Pending: [
@@ -77,7 +77,7 @@ export default function VerifierPortalPage({
     ],
     Invalid: [
       '#374151',
-      'No matching credential found',
+      'No matching certificate found',
       'This ID does not exist in the CICT registry.'
     ]
   }[status];
@@ -87,7 +87,7 @@ export default function VerifierPortalPage({
       {/* Top Bar */}
       <div className="bg-forest text-white/80 text-xs font-medium tracking-wide">
         <div className="max-w-[1100px] mx-auto px-6 py-2 flex justify-between">
-          <span>Official credential inspection · College of Information and Communications Technology</span>
+          <span>Official certificate inspection · College of Information and Communications Technology</span>
           <span className="hidden sm:inline">No login required</span>
         </div>
       </div>
@@ -116,7 +116,7 @@ export default function VerifierPortalPage({
             <div className="eyebrow mb-3">University of Batangas · CICT</div>
             <h1 className="font-serif text-6xl font-medium leading-[1.02]">Verify a certificate</h1>
             <p className="text-ink-soft text-lg mt-5">
-              Enter a credential ID or scan the QR code on a certificate. The result comes straight from the
+              Enter a certificate ID or scan the QR code on a certificate. The result comes straight from the
               blockchain record.
             </p>
             <div className="sheet p-8 mt-10 text-left tick-corners">
@@ -129,7 +129,7 @@ export default function VerifierPortalPage({
                   }
                 >
                   <i className="ph-bold ph-hash"></i>
-                  Credential ID
+                  Certificate ID
                 </button>
                 <button
                   onClick={() => setScan(true)}
@@ -149,7 +149,7 @@ export default function VerifierPortalPage({
                     if (input.trim()) run(input);
                   }}
                 >
-                  <label className="eyebrow block mb-2">Credential ID</label>
+                  <label className="eyebrow block mb-2">Certificate ID</label>
                   <input
                     value={input}
                     onChange={e => setInput(e.target.value)}
@@ -157,7 +157,7 @@ export default function VerifierPortalPage({
                     placeholder="SBT-0000-X0"
                   />
                   <Btn type="submit" className="w-full mt-4 !py-3.5" iconRight="ph-arrow-right">
-                    Verify credential
+                    Verify certificate
                   </Btn>
                   <div className="mt-6 text-xs text-ink-muted">
                     <div className="eyebrow mb-2">Try an example</div>
@@ -202,7 +202,7 @@ export default function VerifierPortalPage({
             <div className="flex justify-center">
               <div className="w-24 h-24 rounded-full border-4 border-[var(--line)] border-t-forest animate-spin"></div>
             </div>
-            <h2 className="font-serif text-3xl font-medium mt-8">Inspecting credential…</h2>
+            <h2 className="font-serif text-3xl font-medium mt-8">Inspecting certificate</h2>
             <div className="font-mono text-xs text-ink-muted mt-2">{id}</div>
             <div className="mt-8 space-y-3 text-left inline-block">
               {steps.map((s, i) => (
@@ -288,7 +288,7 @@ export default function VerifierPortalPage({
                         {cert.status}
                       </span>
                     </Row>
-                    <Row label="Credential ID" mono>
+                    <Row label="Certificate ID" mono>
                       {cert.id}
                     </Row>
                     <Row label="Issue date">{fmt(cert.iso)}</Row>
@@ -344,7 +344,7 @@ export default function VerifierPortalPage({
                   setInput('');
                 }}
               >
-                Verify another credential
+                Verify another certificate
               </Btn>
             </div>
           </div>

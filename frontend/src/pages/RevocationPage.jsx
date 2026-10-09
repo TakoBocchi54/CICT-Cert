@@ -38,9 +38,9 @@ export default function RevocationPage({ certificates = [], onRevoke }) {
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6">
-        {/* Find credential */}
+        {/* Find certificate */}
         <section className="lg:col-span-7 sheet p-8">
-          <div className="eyebrow mb-3">Find a credential</div>
+          <div className="eyebrow mb-3">Find a certificate</div>
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -74,7 +74,7 @@ export default function RevocationPage({ certificates = [], onRevoke }) {
               </div>
             ) : (
               <p className="text-ink-muted text-sm">
-                {query ? 'No credential with that ID.' : 'Enter a credential ID to search.'}
+                {query ? 'No certificate with that ID.' : 'Enter a certificate ID to search.'}
               </p>
             )}
           </div>
