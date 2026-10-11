@@ -95,9 +95,9 @@ function AppContent() {
         if(!controller.signal.aborted) {
           setUser(currentUser);
         }
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) {
-          setCheckingSession(false);
+          setSessionError('Could not check your session, please try again.');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -211,7 +211,7 @@ function AppContent() {
 
   if (!isVerifierPage && checkingSession) {
     return (
-      <main classname="max-w-xl mx-auto p-8 text-center">
+      <main className="max-w-xl mx-auto p-8 text-center">
         <p>Checking your session...</p>
       </main>
     );
@@ -224,7 +224,7 @@ function AppContent() {
         
         <button
           type="button"
-          classname="btn btn-primary mt-4"
+          className="btn btn-primary mt-4"
           onClick={() => window.location.reload()}
         > Try again </button>  
       </main>
