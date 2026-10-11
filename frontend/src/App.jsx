@@ -65,9 +65,7 @@ function AppContent() {
   // Check if we're on verifier page
   const isVerifierPage = location.pathname.startsWith('/verify');
 
-  const handleLogin = (role, userData) => {
-    console.log('handleLogin called with role:', role, 'userData:', userData);
-    
+  const handleLogin = (role, userData) => {    
     // Backend returns different data for faculty and student
     if (role === 'faculty') {
       // Faculty response: { facultyID, firstName, lastName, canIssue }
@@ -116,7 +114,6 @@ function AppContent() {
   const handleCertificateClick = (cert) => {
     setSelectedCertId(cert.id);
     // Navigate to certificate detail page (for future implementation)
-    console.log('Certificate clicked:', cert);
   };
 
   const handleShareClick = (cert) => {

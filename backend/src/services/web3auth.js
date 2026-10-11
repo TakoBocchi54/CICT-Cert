@@ -1,24 +1,29 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-const jwks = createRemoteJWKSet(new URL(process.env.WEB3AUTH_JWKS_URL));
+const clientId = process.env.WEB3AUTH_CLIENT_ID?.trim();
+const issuer = process.env.WEB3AUTH_ISSUER?.trim();
+const jwksUrl = process.env.WEB3AUTH_JWKS_URL?.trim();
+
+if (!clientId || !issuer || !jwksUrl) {
+  throw new Error("Missing Web3Auth verification configuration");
+}
+
+const jwks = createRemoteJWKSet(new URL(jwksUrl));
 
 export async function verifyIdToken(idToken) {
-  try {
-    const { payload } = await jwtVerify(idToken, jwks, {
-      issuer: process.env.WEB3AUTH_ISSUER || "https://web3auth.io",
-      audience: process.env.WEB3AUTH_CLIENT_ID,
-    });
-    return payload;
-  } catch (error) {
-    console.error("JWT Verification Error Details:", {
-      message: error.message,
-      code: error.code,
-      claim: error.claim,
-      reason: error.reason,
-      clientId: process.env.WEB3AUTH_CLIENT_ID,
-      jwksUrl: process.env.WEB3AUTH_JWKS_URL,
-      issuer: process.env.WEB3AUTH_ISSUER,
-    });
-    throw error;
+  const { payload } = await jwtVerify(idToken, jwks, {
+    algorithms: ["ES256"],
+    issuer,
+    audience: clientId,
+    requiredClaims: ["iss", "aud", "exp", "iat"],
+    clockTolerance: 60  ,
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+
+  if (typeof payload.iat !== "number" || payload.iat > now + 60) {
+    throw new Error("Invalid token issue time");
   }
+
+  return payload;
 }

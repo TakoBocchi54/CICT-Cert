@@ -26,25 +26,19 @@ export function useStudentSession() {
         if (!web3Auth) {
           throw new Error("Web3Auth not initialized");
         }
-
-        console.log("Web3Auth instance:", web3Auth);
-        console.log("Attempting to get auth token info...");
         
         let idToken;
         try {
           const tokenInfo = await web3Auth.getAuthTokenInfo();
-          console.log("Token info received:", tokenInfo);
           idToken = tokenInfo?.idToken;
         } catch (tokenError) {
-          console.error("getAuthTokenInfo failed:", tokenError);
+          console.error("getAuthTokenInfo failed:", tokenError.message);
           // Try alternative method: authenticateUser
           try {
-            console.log("Trying authenticateUser as fallback...");
             const userInfo = await web3Auth.authenticateUser();
-            console.log("authenticateUser result:", userInfo);
             idToken = userInfo?.idToken;
           } catch (authError) {
-            console.error("authenticateUser also failed:", authError);
+            console.error("authenticateUser also failed:", authError.message);
             throw new Error("Could not retrieve authentication token from Web3Auth");
           }
         }
@@ -52,8 +46,6 @@ export function useStudentSession() {
         if (!idToken) {
           throw new Error("Could not get authentication token");
         }
-
-        console.log("Got ID token, sending to backend...");
 
         let student = await api("/api/auth/student/session", {
           method: "POST",
@@ -70,7 +62,7 @@ export function useStudentSession() {
         }
         setState({ status: "ready", student, error: null });
       } catch (err) {
-        console.error("Session error:", err);
+        console.error("Session error:", err.message);
         setState({ status: "error", student: null, error: err.message });
       }
     })();

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { verifyIdTokenDev } from "../services/web3auth-dev.js";
+import { verifyIdToken } from "../services/web3auth.js";
 import { startSession, COOKIE } from "../utils/session.js";
 
 const router = Router();
@@ -9,30 +9,18 @@ router.post("/auth/student/session", async (req, res) => {
   const idToken = req.headers.authorization?.replace(/^Bearer /, "");
   if (!idToken) return res.status(401).json({ error: "Missing identity token" });
 
-  console.log("Received token (first 50 chars):", idToken.substring(0, 50) + "...");
-  
-  // Decode token without verification to see its structure
-  try {
-    const parts = idToken.split('.');
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-    console.log("Token payload (unverified):", JSON.stringify(payload, null, 2));
-  } catch (e) {
-    console.log("Could not decode token:", e.message);
-  }
-
   let payload;
   try {
-    payload = await verifyIdTokenDev(idToken);
-    console.log("Token verified successfully. Payload:", payload);
+    payload = await verifyIdToken(idToken);
   } catch (err) {
-    console.error("ID token verification failed:", err.message);
+    console.warn("Student token verification failed:", {
+      code: err.code || "TOKEN_REJECTED",
+      message: err.message,});
     return res.status(401).json({ error: "Could not verify your login" });
   }
 
   const email = payload.email?.toLowerCase().trim();
   if (!email) return res.status(400).json({ error: "No email found on this login" });
-
-  console.log("Looking up student with email:", email);
 
   const { rows } = await pool.query(
     `SELECT u."userID", s."studentID", s."firstName", s."lastName",

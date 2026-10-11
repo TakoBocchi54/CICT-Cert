@@ -55,11 +55,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
 
   // Watch for student session changes and auto-login when ready (only once)
   useEffect(() => {
-    console.log('StudentSession status:', studentSession.status);
-    console.log('StudentSession student:', studentSession.student);
-    console.log('Has logged in:', hasLoggedIn);
-    console.log('Manual disconnect:', manualDisconnect);
-    console.log('Role:', role);
     
     // NEVER auto-login, only login after explicit button click
     // Just show errors if they occur
@@ -81,7 +76,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
       // We'll use a separate useEffect for this
       setLoading(true);
     } catch (err) {
-      console.error('Student login error:', err);
+      console.error('Student login error:', err.message);
       setError(err.message || 'Failed to sign in with Google. Please try again.');
       setLoading(false);
     }
@@ -95,7 +90,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
     }
     
     if (studentSession.status === 'ready' && studentSession.student) {
-      console.log('Manual login - calling onLogin with student data:', studentSession.student);
       setLoading(false);
       onLogin('student', studentSession.student);
     }
