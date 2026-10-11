@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useWeb3AuthConnect, useWeb3AuthDisconnect } from '@web3auth/modal/react';
 import { useStudentSession } from '../hooks/useStudentSession';
@@ -30,7 +30,18 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
   // Web3Auth hooks for student login
   const { connect, loading: web3Loading, error: web3Error } = useWeb3AuthConnect();
   const { disconnect } = useWeb3AuthDisconnect();
-  const studentSession = useStudentSession();
+  const studentAttempt = useRef(0);
+  const facultyRequest = useRef(null);
+  const studentSession = useStudentSession({
+    enabled: role === 'student',
+  });
+
+  useEffect(() => {
+    return () => {
+      studentAttempt.current += 1;
+      facultyRequest.current?.abort();
+    };
+  }, []);
 
   // Disconnect Web3Auth when switching to faculty role
   useEffect(() => {
@@ -66,16 +77,29 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
 
   // Handle student Web3Auth login
   const handleStudentLogin = async () => {
+    const attemptId = ++studentAttempt.current;
     setError('');
     setManualDisconnect(false);
+    setLoading(true);
+
+    if (studentSession.status === 'error') {
+      studentSession.retry();
+      setLoading(true);
+      return;
+    }
+
     try {
       // Connect to Web3Auth
-      await connect();
+      const connection = await connect();
       
-      // Wait for session to be ready, then manually call onLogin
-      // We'll use a separate useEffect for this
-      setLoading(true);
+      if(attemptId !== studentAttempt.current) return; // Ignore if a new attempt has started
+
+      if (!connection) {
+        setLoading(false);
+      }
     } catch (err) {
+      if (attemptId !== studentAttempt.current) return;
+
       console.error('Student login error:', err.message);
       setError(err.message || 'Failed to sign in with Google. Please try again.');
       setLoading(false);
@@ -100,6 +124,14 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (role !== 'faculty' || loading) return;
+
+    facultyRequest.current?.abort(); // Abort any ongoing faculty login request
+
+    const controller = new AbortController();
+    facultyRequest.current = controller; // Store the controller for potential future aborts
+
     setError('');
     setLoading(true);
 
@@ -107,14 +139,25 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
       // Only faculty login with email/password
       const response = await api('/api/auth/faculty/login', {
         method: 'POST',
-        body: { email, password }
+        body: { email, password },
+        signal: controller.signal,
       });
       
+      if (controller.signal.aborted) return; // Ignore if the request was aborted
+
       onLogin('faculty', response);
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+        if (controller.signal.aborted) return;
+
+        setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
-      setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+
+        if (facultyRequest.current === controller) {
+        facultyRequest.current = null; // Clear the reference if this was the active request
+      }
     }
   };
 
@@ -159,7 +202,16 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
             {['student', 'faculty'].map(r => (
               <button
                 key={r}
-                onClick={() => setRole(r)}
+                onClick={() => {
+                  if (r === role) return;
+                  studentAttempt.current += 1; // Increment attempt to cancel any ongoing student login
+                  facultyRequest.current?.abort(); // Abort any ongoing faculty login request
+                  facultyRequest.current = null; // Clear the reference to the aborted request
+                  
+                  setLoading(false);
+                  setError('');
+                  setRole(r);
+                }}
                 className={
                   'py-2.5 rounded-xl text-sm font-semibold capitalize transition-all ' +
                   (role === r ? 'bg-white shadow text-ink' : 'text-ink-muted')
@@ -228,7 +280,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
                           onClick={() => disconnect()} 
                           className="mt-2 text-xs underline text-revoked"
                         >
-                          Sign out and try a different account
+                          Use a different account
                         </button>
                       )}
                     </div>
@@ -245,6 +297,8 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
                       ? 'Verifying your account...'
                       : web3Loading
                       ? 'Connecting...'
+                      : studentSession.status === 'error'
+                      ? 'Retry sign in'
                       : 'Sign in with Google'}
                   </Btn>
                 </div>
