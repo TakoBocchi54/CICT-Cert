@@ -1,14 +1,3 @@
--- CICT-Cert schema (corrected)
--- Re-runnable: drops existing tables first (safe while there is no data yet).
-
-DROP TABLE IF EXISTS blockchain_record CASCADE;
-DROP TABLE IF EXISTS certificate CASCADE;
-DROP TABLE IF EXISTS issuer_wallet CASCADE;
-DROP TABLE IF EXISTS student_wallet CASCADE;
-DROP TABLE IF EXISTS student CASCADE;
-DROP TABLE IF EXISTS cict_faculty CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-
 CREATE TABLE users (
     "userID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "email" VARCHAR(255) NOT NULL UNIQUE,
