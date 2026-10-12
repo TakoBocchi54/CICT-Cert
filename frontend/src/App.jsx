@@ -115,6 +115,8 @@ function AppContent() {
   // Check if we're on verifier page
   const isVerifierPage = location.pathname.startsWith('/verify');
 
+  const needsWalletSetup = user?.role === 'student' && !user.walletAddress;
+
   const handleLogin = (role, userData) => {    
     // Backend returns different data for faculty and student
     if (role === 'faculty') {
@@ -238,7 +240,7 @@ function AppContent() {
         <Route
           path="/login"
           element={
-            user ? (
+            user && !needsWalletSetup ? (
               <Navigate
                 to={
                   user.role === 'faculty' ? '/faculty/dashboard' : '/student/dashboard'
@@ -249,6 +251,7 @@ function AppContent() {
               <LoginPage
                 onLogin={handleLogin}
                 onNavigateVerifier={() => navigate('/verify')}
+                needsWalletSetup={needsWalletSetup}
                 />
             )
           }
@@ -258,7 +261,7 @@ function AppContent() {
         <Route
           path="/student/dashboard"
           element={
-            user?.role === 'student' ? (
+            user?.role === 'student' && !needsWalletSetup ? (
               <>
                 <TopNav
                   role="student"
@@ -287,7 +290,7 @@ function AppContent() {
         <Route
           path="/student/collection"
           element={
-            user?.role === 'student' ? (
+            user?.role === 'student' && !needsWalletSetup ? (
               <>
                 <TopNav
                   role="student"

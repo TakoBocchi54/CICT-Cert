@@ -17,7 +17,7 @@ const SAMPLE_CERT = {
   confirmations: 128
 };
 
-export default function LoginPage({ onLogin, onNavigateVerifier }) {
+export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetup = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
@@ -106,10 +106,10 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
     }
   };
 
-  // Only login after explicit button click AND session is ready
+  // Continue after explicit sign-in or resumed wallet setup.
   useEffect(() => {
     // Only process student session if we're on student role and actively logging in
-    if (role !== 'student' || !loading) {
+    if (role !== 'student' || (!loading && !needsWalletSetup)) {
       return;
     }
     
@@ -120,7 +120,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
     if (studentSession.status === 'error') {
       setLoading(false);
     }
-  }, [loading, role, studentSession.status, studentSession.student, onLogin]);
+  }, [loading, role, needsWalletSetup, studentSession.status, studentSession.student, onLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -286,6 +286,12 @@ export default function LoginPage({ onLogin, onNavigateVerifier }) {
                     </div>
                   )}
                   
+                  {needsWalletSetup && (
+                    <p className="text-sm text-ink-soft mb-4">
+                      Your account is signed in. Complete your wallet setup to continue.
+                    </p>
+                  )}
+
                   <Btn 
                     type="button"
                     className="w-full !py-3.5 !bg-white !text-ink border-2 border-[var(--line)] hover:!bg-paper-2" 
