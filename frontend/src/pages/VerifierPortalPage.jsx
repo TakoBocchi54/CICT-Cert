@@ -296,7 +296,7 @@ export default function VerifierPortalPage({
                   <section className="sheet p-7 rise" style={{ '--d': '.12s' }}>
                     <div className="eyebrow mb-1">Blockchain verification</div>
                     <Row label="Network">Polygon PoS</Row>
-                    <Row label="Token standard">ERC-5192 (non-transferable)</Row>
+                    <Row label="Token standard">ERC-5484 (consensual soulbound)</Row>
                     <Row label="Block" mono>
                       #{cert.block.toLocaleString()}
                     </Row>

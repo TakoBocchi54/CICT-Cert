@@ -105,3 +105,19 @@ CREATE TABLE blockchain_record (
         FOREIGN KEY ("certificateID")
         REFERENCES certificate ("certificateID")
 );
+
+-- The composite index also covers the certificate's studentID-only foreign key.
+CREATE INDEX IF NOT EXISTS idx_certificate_student_wallet
+    ON public.certificate ("studentID", "studentWalletID");
+
+CREATE INDEX IF NOT EXISTS idx_certificate_student_wallet_id
+    ON public.certificate ("studentWalletID");
+
+CREATE INDEX IF NOT EXISTS idx_certificate_authorized_by
+    ON public.certificate ("authorizedBy");
+
+CREATE INDEX IF NOT EXISTS idx_certificate_issuer_wallet_id
+    ON public.certificate ("issuerWalletID");
+
+CREATE INDEX IF NOT EXISTS idx_blockchain_record_certificate_id
+    ON public.blockchain_record ("certificateID");

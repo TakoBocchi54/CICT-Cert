@@ -289,7 +289,8 @@ export default function IssuancePage({ onComplete, onNavigateRegistry }) {
                   >
                     <i className="ph-fill ph-warning text-lg"></i>
                     <p className="mt-1 font-medium">
-                      Issuance is permanent. Credentials can be revoked later but not deleted.
+                      Students must accept the certificate and its burn policy before issuance.
+                      Credentials can be revoked later; burning follows the accepted policy.
                     </p>
                   </div>
                 </div>
