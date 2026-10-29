@@ -393,7 +393,6 @@ function AppContent() {
           path="/verify"
           element={
             <VerifierPortalPage
-              certificates={certificates}
               initialId={new URLSearchParams(location.search).get('id') || ''}
               onBackToPortal={() => {
                 if (user) {
