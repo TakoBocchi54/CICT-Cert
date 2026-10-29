@@ -6,6 +6,7 @@ import studentAuthRoutes from "./routes/studentAuth.js";
 import walletRoutes from "./routes/wallet.js";
 import facultyAuthRoutes from "./routes/facultyAuth.js";
 import authSessionRoutes from "./routes/authSession.js";
+import certificateRoutes from "./routes/certificates.js";
 
 const app = express();
 
@@ -18,5 +19,6 @@ app.use("/api", authSessionRoutes);
 app.use("/api", studentAuthRoutes);
 app.use("/api", walletRoutes);
 app.use("/api", facultyAuthRoutes);
+app.use("/api", certificateRoutes);
 
 export default app;
