@@ -6,6 +6,7 @@ import TopNav from './components/TopNav';
 import LoginPage from './pages/LoginPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import StudentCollectionPage from './pages/StudentCollectionPage';
+import FacultyAccountPage from './pages/FacultyAccountPage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
@@ -172,6 +173,7 @@ function AppContent() {
       'faculty-dashboard': '/faculty/dashboard',
       'faculty-issue': '/faculty/issue',
       'faculty-revocation': '/faculty/revocation',
+      'faculty-account': '/faculty/account',
       'verify': '/verify',
     };
     navigate(routes[view] || '/');
@@ -202,9 +204,14 @@ function AppContent() {
   };
 
   // Get current view for TopNav active state
-  const currentView = location.pathname.split('/').pop() || 
-    (location.pathname.includes('student') ? 'student-dashboard' : 
-     location.pathname.includes('faculty') ? 'faculty-dashboard' : '');
+  const currentView = ({
+    '/student/dashboard': 'student-dashboard',
+    '/student/collection': 'student-certificates',
+    '/faculty/dashboard': 'faculty-dashboard',
+    '/faculty/issue': 'faculty-issue',
+    '/faculty/revocation': 'faculty-revocation',
+    '/faculty/account': 'faculty-account',
+  })[location.pathname] || '';
 
   // Get student certificates
   const studentCerts = user?.role === 'student' 
@@ -314,6 +321,25 @@ function AppContent() {
         />
 
         {/* Faculty Routes */}
+        <Route
+          path="/faculty/account"
+          element={
+            user?.role === 'faculty' ? (
+              <>
+                <TopNav role="faculty" view={currentView} onNavigate={handleNavigate}
+                  onSignOut={handleSignOut} userName={user.name} userTitle={user.title} />
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                  <FacultyAccountPage onProfileUpdated={account => setUser(current => ({
+                    ...current,
+                    name: account.firstName + ' ' + account.lastName,
+                    email: account.email,
+                    canIssue: account.canIssue,
+                  }))} />
+                </main>
+              </>
+            ) : <Navigate to="/login" replace />
+          }
+        />
         <Route
           path="/faculty/dashboard"
           element={

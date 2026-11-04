@@ -8,6 +8,8 @@ import facultyAuthRoutes from "./routes/facultyAuth.js";
 import authSessionRoutes from "./routes/authSession.js";
 import certificateRoutes from "./routes/certificates.js";
 
+import facultyAccountRoutes from "./routes/facultyAccount.js";
+
 const app = express();
 
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
@@ -20,5 +22,7 @@ app.use("/api", studentAuthRoutes);
 app.use("/api", walletRoutes);
 app.use("/api", facultyAuthRoutes);
 app.use("/api", certificateRoutes);
+
+app.use("/api", facultyAccountRoutes);
 
 export default app;

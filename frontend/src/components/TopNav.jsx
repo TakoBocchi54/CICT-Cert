@@ -110,6 +110,17 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
                     ))}
                   </div>
                   <div className="hair py-1">
+                    {role === 'faculty' && (
+                      <button
+                        role="menuitem"
+                        onClick={() => { setMenu(false); onNavigate('faculty-account'); }}
+                        aria-current={view === 'faculty-account' ? 'page' : undefined}
+                        className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-paper-2"
+                      >
+                        <i className="ph-bold ph-user-circle" aria-hidden="true"></i>
+                        Account settings
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setMenu(false);
