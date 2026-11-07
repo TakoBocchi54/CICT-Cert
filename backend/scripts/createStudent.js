@@ -1,10 +1,11 @@
 import "dotenv/config";
 import { pool } from "../src/db/pool.js";
 
-const [email, firstName, lastName, program = "BSIT"] = process.argv.slice(2);
+const [email, fullName, program] = process.argv.slice(2);
 
-if (!email || !firstName || !lastName) {
-  console.error('Usage: node scripts/createStudent.js <email> <firstName> <lastName> [program=BSIT]');
+if (!email?.trim() || !fullName?.trim() || fullName.trim().length > 255 ||
+    !program?.trim() || program.trim().length > 255) {
+  console.error('Usage: node scripts/createStudent.js <email> "<fullName>" "<program>" (name and program: 1–255 characters)');
   process.exit(1);
 }
 
@@ -20,9 +21,9 @@ try {
   );
 
   await client.query(
-    `INSERT INTO student ("userID", "firstName", "lastName", "program")
-     VALUES ($1, $2, $3, $4)`,
-    [rows[0].userID, firstName, lastName, program]
+    `INSERT INTO student ("userID", "fullName", "program")
+     VALUES ($1, $2, $3)`,
+    [rows[0].userID, fullName.trim(), program.trim()]
   );
 
   await client.query("COMMIT");

@@ -28,7 +28,7 @@ router.get("/auth/me", async (req,res) => {
 
     if (session.role === "STUDENT") {
         result = await pool.query(
-            `SELECT u."email", s."studentID", s."firstName", s."lastName", w."studentWalletAddress" AS "walletAddress"
+            `SELECT u."email", s."studentID", s."fullName", w."studentWalletAddress" AS "walletAddress"
             FROM users u
             JOIN student s ON s."userID" = u."userID"
             LEFT JOIN student_wallet w ON w."studentID" = s."studentID"
@@ -62,7 +62,7 @@ router.get("/auth/me", async (req,res) => {
     res.json ({
         role: isStudent ? "student" : "faculty",
         email: account.email,
-        name: `${account.firstName} ${account.lastName}`,
+        name: isStudent ? account.fullName : `${account.firstName} ${account.lastName}`,
         title: isStudent ? "Student" : "Faculty",
         ...(isStudent
             ? {

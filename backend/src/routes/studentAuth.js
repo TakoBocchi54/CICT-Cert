@@ -23,7 +23,7 @@ router.post("/auth/student/session", async (req, res) => {
   if (!email) return res.status(400).json({ error: "No email found on this login" });
 
   const { rows } = await pool.query(
-    `SELECT u."userID", s."studentID", s."firstName", s."lastName",
+    `SELECT u."userID", u."email", s."studentID", s."fullName",
             w."studentWalletAddress" AS "walletAddress"
      FROM users u
      JOIN student s ON s."userID" = u."userID"
@@ -40,8 +40,8 @@ router.post("/auth/student/session", async (req, res) => {
   await startSession(res, { role: "STUDENT", userID: s.userID, studentID: s.studentID });
   res.json({
     studentID: s.studentID,
-    firstName: s.firstName,
-    lastName: s.lastName,
+    email: s.email,
+    fullName: s.fullName,
     walletAddress: s.walletAddress,
   });
 });

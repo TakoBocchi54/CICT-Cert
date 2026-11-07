@@ -64,7 +64,9 @@ router.post("/wallet/link", requireStudent, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT "studentID", "firstName", "lastName" FROM student WHERE "studentID" = $1`,
+    `SELECT s."studentID", s."fullName", u."email"
+     FROM student s JOIN users u ON u."userID" = s."userID"
+     WHERE s."studentID" = $1`,
     [studentID]
   );
   res.json({ ...rows[0], walletAddress: checksummed });

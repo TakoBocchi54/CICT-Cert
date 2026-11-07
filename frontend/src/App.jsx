@@ -132,11 +132,11 @@ function AppContent() {
       });
       navigate('/faculty/dashboard');
     } else {
-      // Student response: { studentID, firstName, lastName, walletAddress }
+      // Student response: { studentID, email, fullName, walletAddress }
       setUser({
         role,
-        email: userData.email || 'student@ub.edu.ph',
-        name: `${userData.firstName} ${userData.lastName}`,
+        email: userData.email,
+        name: userData.fullName,
         title: 'Student',
         studentID: userData.studentID,
         walletAddress: userData.walletAddress

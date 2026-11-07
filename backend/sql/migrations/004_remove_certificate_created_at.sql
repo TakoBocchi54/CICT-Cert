@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE certificate DROP COLUMN IF EXISTS "createdAt";
+
+COMMIT;

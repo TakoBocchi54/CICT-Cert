@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "create-faculty": "node scripts/createFaculty.js"
+    "create-faculty": "node scripts/createFaculty.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
