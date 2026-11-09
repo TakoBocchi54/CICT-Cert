@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Certificate, Pill, Seal } from '../components/design-system';
+import { Certificate, Pill, Seal, Btn } from '../components/design-system';
 
-export default function StudentCollectionPage({ certificates = [], onCertificateClick }) {
+export default function StudentCollectionPage({ certificates = [], onCertificateClick, onDownloadClick }) {
   const [filter, setFilter] = useState('All');
   
   const sortedCerts = [...certificates].sort((a, b) => b.iso.localeCompare(a.iso));
@@ -84,6 +84,7 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
                 <div className="font-mono text-xs text-ink-muted">{c.id}</div>
                 <Pill status={c.status} />
               </div>
+              <Btn variant="line" size="sm" className="mt-3" icon="ph-download-simple" onClick={() => onDownloadClick(c)}>Download PDF</Btn>
             </div>
           ))}
         </div>

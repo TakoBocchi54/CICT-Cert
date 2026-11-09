@@ -116,6 +116,7 @@ CREATE TABLE blockchain_record (
     "transactionType" VARCHAR(10) NOT NULL
         CHECK ("transactionType" IN ('MINT', 'REVOKE')),
     "transactionHash" VARCHAR(66) UNIQUE,
+    "signedTransaction" TEXT,
     "requestedBy" BIGINT NOT NULL,
     "revocationReason" TEXT,
     "tokenID" BIGINT,

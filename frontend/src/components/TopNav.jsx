@@ -9,7 +9,7 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
     role === 'faculty'
       ? [
           ['faculty-dashboard', 'Dashboard'],
-          ['faculty-issue', 'Issuance'],
+          ['faculty-issue', 'Seminars'],
           ['faculty-revocation', 'Revocations'],
         ]
       : [
@@ -49,7 +49,7 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
         <div className="flex items-center gap-3">
           <button
             onClick={() => onNavigate('verify')}
-            className="hidden sm:flex btn btn-line btn-sm"
+            className="hidden! sm:flex! btn btn-line btn-sm"
           >
             <i className="ph-bold ph-seal-check text-verified"></i>
             Public verifier
@@ -62,7 +62,7 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
 
           <button
             onClick={() => setConfirmOut(true)}
-            className="hidden lg:flex btn btn-ghost btn-sm"
+            className="hidden! lg:flex! btn btn-ghost btn-sm"
             title="Sign out"
           >
             <i className="ph-bold ph-sign-out"></i>

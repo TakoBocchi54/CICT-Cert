@@ -29,7 +29,54 @@ Deploy the migrated schema, backend, and frontend together: student responses no
 - Each blockchain attempt records `requestedBy` and a revocation reason for `REVOKE`. Failed attempts retain their `FAILED` status without a stored explanation. Only one pending attempt is allowed per certificate. Transaction hashes can be null before broadcast. Keep uncertain broadcasts pending until reconciled; a timeout alone does not prove failure.
 - Event times use `TIMESTAMPTZ`; seminar dates use `DATE`. Hashes use lowercase `0x` plus 64 hex characters; wallet uniqueness ignores hex letter case.
 
-These are database safeguards. CSV import, signature verification for certificate consent, faculty issuance/revocation endpoints, chain receipt reconciliation, and PDF generation are separate implementation steps. The future issuing service must check attendance, faculty permission, the configured issuer, and the student's certificate-specific signature before sending a transaction.
+These are database safeguards. Signature verification for certificate consent, faculty issuance/revocation endpoints, chain receipt reconciliation, and PDF generation are separate implementation steps. The future issuing service must check attendance, faculty permission, the configured issuer, and the student's certificate-specific signature before sending a transaction. Issuance must coordinate using the same seminar row lock as attendance imports so attendance cannot change during approval of a blockchain attempt.
+
+## Seminar registration
+
+Faculty can create seminars and import registration CSVs from **Seminars** in the portal. This creates student accounts so those students can sign in with Google and link a wallet. Registration does not mark attendance or issue certificates.
+
+The accepted CSV format is:
+
+```csv
+full_name,section,program,google_account
+Juan Dela Cruz,CS 3-1,BS Computer Science,juan.delacruz@gmail.com
+```
+
+Only `full_name`, `program`, and `google_account` are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM.
+
+Emails are trimmed and lowercased; Gmail plus tags and dots are preserved, and Google Workspace email domains are accepted. Identical repeated emails are counted once; conflicting names/programs for the same email within a file reject the entire import. Existing student names, programs, wallets, and attendance values are preserved. Reimporting adds missing registrations without duplicating accounts. The saved registration table shows the existing profile values for reused accounts.
+
+All rows are validated before writing, and each import is a transaction. A faculty email or an existing student account with no student profile rejects the whole import, including newly inserted accounts. Concurrent imports are serialized per seminar. No real seminar or student records are seeded by the tests.
+
+Faculty-only endpoints (session cookie required):
+
+| Method | Endpoint | Body |
+| --- | --- | --- |
+| GET | `/api/faculty/seminars` | — |
+| POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08" }` |
+| GET | `/api/faculty/seminars/:seminarID/registrations` | — |
+| POST | `/api/faculty/seminars/:seminarID/registrations/import` | `{ "csv": "full_name,program,google_account\n..." }` |
+| POST | `/api/faculty/seminars/:seminarID/attendance/preview` | `{ "csv": "google_account\n..." }` |
+| POST | `/api/faculty/seminars/:seminarID/attendance/import` | `{ "csv": "google_account\n...", "previewHash": "<returned by preview>" }` |
+
+`createdBy` is always taken from the signed-in faculty account. Faculty without issuance permission may prepare registrations; issuance and revocation will require `canIssue`. Seminars are shared across CICT faculty. The import returns counts for new registrations, existing registrations, new student accounts, and duplicate CSV rows skipped.
+
+## Final attendance
+
+In the selected seminar, use **Import final attendance** to choose a CSV, review the matches, then **Confirm attendance**. Only the `google_account` header is required. The full export can include other columns, which are ignored:
+
+```csv
+full_name,section,program,student_id,google_account
+Juan Dela Cruz,CS 3-1,BS Computer Science,1234567,juan.delacruz@gmail.com
+```
+
+- Attendance matches the normalized email against registrations for that specific seminar. Names and school student IDs are never used for matching. Attendance import never creates accounts or registrations and never changes profile names, programs, or wallets.
+- Duplicate emails count once. Unmatched emails block the whole save: faculty must correct the CSV or register those students for the seminar, then review again. There is no attendance-percentage or eligibility calculation.
+- A confirmed CSV is the **complete attendance list**, replacing the seminar's current attendance flags. Omitted registered students become absent. The review lists previously marked attendees whose attendance will be cleared. Empty/header-only CSVs are rejected to prevent accidentally clearing all attendance.
+- Students without wallets may be marked attended; the preview and save response report how many still need wallet setup. No certificates or transactions are created by this step.
+- A review does not save attendance. Confirmation resubmits that CSV and its server-provided `previewHash`. Changed CSV contents, registrations, attendance, or relevant certificate/transaction states invalidate the old review with HTTP 409. Review again before saving.
+- An issued certificate or unresolved blockchain attempt blocks clearing that recipient's attendance. A confirmed mint awaiting certificate reconciliation also blocks removal. Revoked certificate history remains intact.
+- Saves are transactional and serialized per seminar. Repeating review and confirmation with the same final list changes nothing. Other seminars' attendance is preserved.
 
 The manual student script now takes a full name and explicit program:
 
@@ -37,10 +84,57 @@ The manual student script now takes a full name and explicit program:
 node scripts/createStudent.js student@example.com "Juan Dela Cruz" "BS Computer Science"
 ```
 
+## Pending certificates and recipient approval
+
+After confirming final attendance, an authorized faculty account (`canIssue = true`) can select **Prepare pending certificates**. This reads `issuer()` from the configured Amoy contract and records its wallet in `issuer_wallet` if it is not already registered. An inactive issuer or a network mismatch blocks preparation. Only `AMOY_RPC_URL` and `CONTRACT_ADDRESS` are needed; no issuer private key is used by this step.
+
+Preparation creates one pending certificate per attendee, assigns a numeric certificate number, and saves the recipient name, seminar title, and seminar date as certificate snapshots. Missing wallets are allowed. Repeat preparation preserves existing numbers, snapshots and approvals. It does not automatically create replacements for revoked certificates; replacements will use an explicit workflow.
+
+Students see pending certificates under **Certificate approvals** on their dashboard and collection. They open a review showing the certificate, issuer and recipient wallets, and the issuer-only revocation rule. **Approve with my wallet** signs the exact displayed message. The wallet linked to the registered Google account must sign. Linking a wallet during login is separate from approving a certificate. Students who link a wallet later can review their existing pending certificate without getting a new certificate number. Issued certificates appear in the existing dashboard and collection.
+
+| Method | Endpoint | Access / body |
+| --- | --- | --- |
+| GET | `/api/faculty/seminars/:seminarID/certificates` | Faculty |
+| POST | `/api/faculty/seminars/:seminarID/certificates/prepare` | Faculty with `canIssue` |
+| GET | `/api/student/certificates` | Student; own certificates and confirmed mint details only |
+| POST | `/api/student/certificates/:certificateID/consent-request` | Student; own certificate |
+| POST | `/api/student/certificates/:certificateID/consent` | Student; `{ "challenge": "<signed server request>", "signature": "0x..." }` |
+
+The approval request is signed by the server, bound to the student, certificate and contract, and expires after 10 minutes. Approval rechecks attendance, the linked wallet and certificate facts before verifying the wallet signature. A retry with the same signed request is idempotent; another approval cannot overwrite saved evidence. Changed certificate facts require a fresh review. The message, signature and approval timestamp are saved, but approval alone leaves status `PENDING` and `issuedAt` null. No blockchain transaction is submitted by approval.
+
+`utils/certificateConsent.js` defines the canonical certificate hash: Keccak-256 of the UTF-8 JSON object with fields in this exact order: `version` (number `1`), `chainId` (number), `contractAddress` (lowercase), `issuerAddress` (lowercase), `certificateNo` (decimal string), `recipient` (lowercase wallet address), `recipientName`, `seminarTitle`, `seminarDate` (`YYYY-MM-DD`), and `burnAuth` (`IssuerOnly`). Text is the stored snapshot, without further normalization. The hash represents these facts, not PDF file bytes. Issuance and metadata verification must reuse this encoding.
+
+## Faculty issuance on Amoy
+
+Apply `sql/migrations/005_signed_transaction.sql` to existing databases. Fresh `schema.sql` includes the nullable `blockchain_record.signedTransaction TEXT` column; the general migration script also applies migration 005. This addition preserves all accounts and certificate records. It stores a signed transaction, never the private key, so an interrupted request can resume exactly the same mint.
+
+Set `ISSUER_PRIVATE_KEY` in **backend/.env** to the same dev issuer key used for the deployed contract. Keep it out of frontend variables and Git. Restart the backend after changing environment settings. Missing or mismatched keys disable new minting without preventing login or verification. The issuer wallet needs Amoy POL; there is no fixed balance assumed sufficient for every batch.
+
+Faculty select **Review issuance**, then **Confirm issuance on Amoy**. Only attended recipients with a linked wallet and saved consent enter the batch. The backend independently rechecks those conditions, reconstructs the approval message, verifies its wallet signature and canonical hash, verifies the deployed issuer and chain, simulates the mint, and checks funds before signing. Transactions are processed one at a time. Leaving the page stops remaining requests, but an already submitted transaction may still finish.
+
+| Method | Endpoint | Access |
+| --- | --- | --- |
+| POST | `/api/faculty/seminars/:seminarID/certificates/:certificateID/issue` | Faculty with current `canIssue`; issue or resume this certificate |
+| POST | `/api/faculty/seminars/:seminarID/certificates/:certificateID/issuance/check` | Faculty with current `canIssue`; reconcile/resubmit an existing attempt, never sign a new one |
+
+The signed payload and its transaction hash are committed **before broadcasting**. Uncertain send responses remain pending. **Check transaction** rechecks the receipt and, when absent, resubmits that same signed payload. Never mark an uncertain transaction failed just because a request timed out. A PostgreSQL lock and a check for any outstanding issuer transaction prevent another seminar or backend instance from allocating the same wallet nonce. Keep this wallet dedicated to backend issuance; external nonce replacements or fee bumps require manual reconciliation.
+
+The API waits for the receipt's block to be behind the RPC's `finalized` block, checks its canonical block hash, receipt sender and contract, the ERC-5484 `Issued` event, and the certificate's on-chain verification result. Only then are the token ID, block number, transaction status and certificate `issuedAt` committed together. Finality follows the [Polygon finality documentation](https://docs.polygon.technology/pos/concepts/finality/finality). An RPC without the finalized block tag must be replaced with one supporting it; issuance remains pending rather than claiming success.
+
+A finalized revert marks the attempt/certificate failed, preserving its number and approval for a later retry. A successful receipt without the expected event or matching hash stays unresolved for review. Certificates already issued are returned without another mint. Hashes present on Amoy without a matching local attempt are blocked for manual reconciliation rather than minted again. Faculty see token IDs and explorer links, and students see confirmed certificates in their portal.
+
+Public `GET /api/certificates/verify/:certHash` requires no login and checks the configured Amoy contract. Alongside blockchain status, token ID, recipient and timestamps, it returns the on-chain `issuerAddress` and a `certificate` containing `recipientName`, `seminarTitle`, `seminarDate` and the numeric `certificateNo` as a string. These details are published only when the saved snapshot reproduces the on-chain hash using the same recipient wallet, issuer, contract and chain. Email, approval signatures and signed transactions are never included.
+
+`detailsStatus` is `Verified` for matching details, `NotFound` for an unknown on-chain hash, `Missing` for a blockchain record without a local snapshot, `Mismatch` for conflicting facts, or `Unavailable` if lookup fails. Missing or unconfirmed details return `certificate: null` without changing the blockchain's status. RPC failure returns 503; the database cannot override a revocation. The public page shows these distinctions and asks verifiers to compare the displayed details with the certificate they received. It does not inspect an uploaded PDF; someone reusing a valid QR on an altered document is detected by that comparison.
+
+Students can select **Download PDF** on their dashboard or collection, review the certificate, and download a PDF file directly. The export renders only `Certificate.jsx`, at a fixed high resolution so mobile and desktop produce the same result. It preserves the template's `1.414:1` aspect ratio on a page 297 mm wide (approximately 210.04 mm high), with no extra page margins or print dialog. The certificate fills the single PDF page, with the scannable QR beside the bottom-right logo and the full certificate hash along the bottom. The PDF contains no clickable links; scan the QR to open public verification. The design is embedded as an image, so its text is not selectable in the PDF. The QR encodes `/verify?id=<certificateHash>` on the frontend's current origin; it contains no student email or authentication token. Generate shared PDFs from the deployed portal, because a QR generated on localhost points back to localhost. Verification remains public and checks the current blockchain status even if the PDF was saved before revocation. No PDF files or QR images are uploaded to another service.
+
+Frontend PDF and verification-link checks: run `node --test src/lib/certificatePdf.test.js src/lib/certificateVerificationUrl.test.js` from `frontend`.
+
 ## Checks
 
 ```powershell
 npm test
 ```
 
-Route tests use mocked database responses and a local identity signing key. Schema tests use real PostgreSQL in temporary schemas, clean up those schemas, and refuse remote database targets. Set a local `DATABASE_URL` to run those integration tests; otherwise they report a skip. They exercise both fresh installation and migration from `sql/fixtures/legacy-schema.sql`, including rollback when old certificate history needs a backfill.
+Account/session route tests use mocked database responses and a local identity signing key. Seminar/attendance, certificate preparation/approval and schema tests use real PostgreSQL in temporary schemas, clean up those schemas, and refuse remote database targets. Set a local `DATABASE_URL` to run those integration tests; otherwise they report a skip. They cover fresh installation, migration from `sql/fixtures/legacy-schema.sql`, CSV validation, account reuse, attendance matching, concurrent requests, stale reviews, certificate safeguards, and rollback on database failures. Certificate approval tests use generated test wallets and a local read-only JSON-RPC fixture; no Amoy transaction or POL is used.

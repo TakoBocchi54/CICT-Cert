@@ -1,380 +1,169 @@
-import { useState, useRef, useEffect } from 'react';
-import { Certificate, Seal, Pill, Btn } from '../components/design-system';
+import { useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Btn } from '../components/design-system';
+import { api } from '../lib/api';
+import AttendanceImport from '../components/AttendanceImport';
+import CertificatePreparation from '../components/CertificatePreparation';
 
-const STAGES = [
-  ['Attendance', 'Upload the record'],
-  ['Template', 'Choose the design'],
-  ['Review', 'Confirm recipients'],
-  ['Issue', 'Mint on Polygon']
-];
-
-// Sample data
-const SAMPLE_CERT = {
-  id: 'SBT-PREVIEW-01',
-  recipient: 'Student Name',
-  seminar: 'Sample Seminar',
-  iso: '2026-01-01',
-  status: 'Verified',
-  block: 58000000,
-};
-
-const RECIPIENTS = Array.from({ length: 142 }, (_, i) => ({
-  id: `2023-${String(100 + i * 3).padStart(5, '0')}`,
-  name: `Student ${i + 1}`,
-  email: `student${i + 1}@ub.edu.ph`,
-  attendance: i % 9 === 0 ? '92%' : '100%'
-}));
-
-const INELIGIBLE = [
-  { id: '2023-00211', name: 'Cruz, Jonathan', att: '45%', why: 'Below 80% minimum' },
-  { id: '2023-00412', name: 'Flores, Mark', att: '20%', why: 'Below 80% minimum' },
-  { id: '2023-00533', name: 'Garcia, Lea', att: '62%', why: 'Below 80% minimum' },
-  { id: '2023-00541', name: 'Hernandez, Paolo', att: '78%', why: 'Below 80% minimum' },
-  { id: '2023-00618', name: 'Ibarra, Nico', att: '100%', why: 'No sign-out record' },
-  { id: '2023-00702', name: 'Javier, Ella', att: '—', why: 'Email not institutional' },
-  { id: '2023-00755', name: 'Lopez, Ramon', att: '55%', why: 'Below 80% minimum' },
-  { id: '2023-00809', name: 'Mendoza, Ina', att: '100%', why: 'Duplicate entry' },
-];
-
-export default function IssuancePage({ onComplete, onNavigateRegistry }) {
-  const [step, setStep] = useState(1);
+export default function IssuancePage({ onNavigateRegistry }) {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [selectedId, setSelectedId] = useState('');
   const [file, setFile] = useState(null);
-  const [drag, setDrag] = useState(false);
-  const [theme, setTheme] = useState('classic');
-  const [query, setQuery] = useState('');
-  const [minted, setMinted] = useState(0);
-  const inputRef = useRef();
+  const [feedback, setFeedback] = useState(null);
+  const fileInput = useRef(null);
+  const seminars = useQuery({
+    queryKey: ['faculty-seminars'],
+    queryFn: () => api('/api/faculty/seminars'),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const selected = seminars.data?.find(seminar => seminar.seminarID === selectedId) || seminars.data?.[0];
+  const registrations = useQuery({
+    queryKey: ['seminar-registrations', selected?.seminarID],
+    queryFn: () => api('/api/faculty/seminars/' + selected.seminarID + '/registrations'),
+    enabled: !!selected,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const create = useMutation({
+    mutationFn: body => api('/api/faculty/seminars', { method: 'POST', body }),
+    onSuccess: async seminar => {
+      setTitle('');
+      setDate('');
+      changeSeminar(seminar.seminarID);
+      await queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] });
+    },
+  });
+  const upload = useMutation({
+    mutationFn: async ({ seminarID, file }) => {
+      if (!file || file.size === 0 || file.size > 1024 * 1024) throw new Error('Choose a non-empty CSV file up to 1 MB.');
+      return api('/api/faculty/seminars/' + seminarID + '/registrations/import', {
+        method: 'POST', body: { csv: await file.text() },
+      });
+    },
+    onSuccess: async (result, { seminarID }) => {
+      setFeedback(result);
+      setFile(null);
+      if (fileInput.current) fileInput.current.value = '';
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] }),
+        queryClient.invalidateQueries({ queryKey: ['seminar-registrations', seminarID] }),
+      ]);
+    },
+  });
+  const busy = create.isPending || upload.isPending;
 
-  // Minting animation
-  useEffect(() => {
-    if (step !== 4 || minted >= 142) return;
-    const timer = setInterval(() => {
-      setMinted(m => Math.min(142, m + 3 + Math.floor(Math.random() * 6)));
-    }, 140);
-    return () => clearInterval(timer);
-  }, [step, minted]);
-
-  const phase = minted >= 142 ? 3 : minted > 110 ? 2 : minted > 15 ? 1 : 0;
-  const phases = [
-    'Preparing certificate metadata',
-    'Minting soulbound tokens on Polygon',
-    'Waiting for block confirmations',
-    'All credentials confirmed'
-  ];
-
-  const filtered = RECIPIENTS.filter(r =>
-    (r.name + r.id + r.email).toLowerCase().includes(query.toLowerCase())
-  );
-
-  const loadFile = (name) => {
-    setFile(name || 'seminar_attendance.csv');
-  };
+  function changeSeminar(id) {
+    setSelectedId(id);
+    setFile(null);
+    setFeedback(null);
+    upload.reset();
+    if (fileInput.current) fileInput.current.value = '';
+  }
 
   return (
-    <div>
-      {/* Page Header */}
-      <div className="mb-10">
-        <div className="eyebrow mb-3 rise">
-          Issue certificates
+    <div className="pb-16">
+      <header className="mb-9 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="eyebrow mb-3">Faculty workspace</div>
+          <h1 className="font-serif text-4xl font-medium md:text-5xl">Seminar registrations</h1>
+          <p className="mt-3 max-w-2xl text-ink-soft">Create a seminar and register students using their Google accounts before the event.</p>
         </div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>
-          Stage {step}: {STAGES[step - 1][0]}
-        </h1>
-      </div>
+        <Btn variant="line" onClick={onNavigateRegistry}>Back to dashboard</Btn>
+      </header>
 
-      <div className="grid lg:grid-cols-[250px_1fr] gap-8">
-        {/* Stage rail */}
-        <ol className="hidden lg:block space-y-1 sticky top-28 self-start">
-          {STAGES.map(([name, subtitle], i) => {
-            const done = step > i + 1;
-            const current = step === i + 1;
-            return (
-              <li
-                key={name}
-                className={
-                  'flex items-center gap-4 p-3 rounded-2xl transition-all ' +
-                  (current ? 'bg-white border border-[var(--line)] shadow-sm' : '')
-                }
-              >
-                <div
-                  className={
-                    'w-10 h-10 rounded-full flex items-center justify-center font-serif text-lg shrink-0 transition-all ' +
-                    (done
-                      ? 'bg-verified text-white'
-                      : current
-                      ? 'bg-forest text-white'
-                      : 'border border-[var(--line)] text-ink-muted')
-                  }
-                >
-                  {done ? <i className="ph-bold ph-check text-base"></i> : i + 1}
-                </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[340px_1fr]">
+        <section className="sheet p-6">
+          <h2 className="mb-5 font-serif text-2xl">Create a seminar</h2>
+          <form onSubmit={event => {
+            event.preventDefault();
+            if (!busy) create.mutate({ seminarTitle: title, seminarDate: date });
+          }}>
+            <fieldset disabled={busy} className="space-y-4">
+              <div>
+                <label htmlFor="seminar-title" className="mb-2 block text-sm font-medium">Seminar title</label>
+                <input id="seminar-title" className="field" required maxLength={255} value={title} onChange={event => setTitle(event.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="seminar-date" className="mb-2 block text-sm font-medium">Seminar date</label>
+                <input id="seminar-date" className="field" type="date" min="0001-01-01" max="9999-12-31" required value={date} onChange={event => setDate(event.target.value)} />
+              </div>
+              {create.error && <p role="alert" className="text-sm text-revoked">{create.error.message}</p>}
+              <Btn type="submit" disabled={busy} className="w-full">{create.isPending ? 'Saving...' : 'Create seminar'}</Btn>
+            </fieldset>
+          </form>
+        </section>
+
+        <section className="sheet min-w-0 p-6">
+          <h2 className="mb-5 font-serif text-2xl">Import registrations</h2>
+          {seminars.isPending ? <p role="status">Loading seminars...</p> : seminars.error ? (
+            <div role="alert" className="space-y-3">
+              <p className="text-sm text-revoked">{seminars.error.message}</p>
+              <Btn variant="line" onClick={() => seminars.refetch()}>Try again</Btn>
+            </div>
+          ) : !selected ? <p className="text-ink-soft">Create your first seminar to import its registration list.</p> : (
+            <>
+              <label htmlFor="selected-seminar" className="mb-2 block text-sm font-medium">Seminar</label>
+              <select id="selected-seminar" className="field" value={selected.seminarID} disabled={busy} onChange={event => changeSeminar(event.target.value)}>
+                {seminars.data.map(seminar => <option key={seminar.seminarID} value={seminar.seminarID}>{seminar.seminarTitle} — {seminar.seminarDate}</option>)}
+              </select>
+              <div className="my-5 flex flex-wrap gap-4 text-sm">
+                <span><strong>{selected.registrationCount}</strong> registered</span>
+                <span><strong>{selected.walletCount}</strong> wallets connected</span>
+                <span><strong>{selected.attendanceCount}</strong> attended</span>
+                <span><strong>{selected.registrationCount - selected.walletCount}</strong> awaiting wallet setup</span>
+              </div>
+              <form className="space-y-4 rounded-xl border border-[var(--line)] bg-paper p-4" onSubmit={event => {
+                event.preventDefault();
+                if (busy) return;
+                setFeedback(null);
+                upload.mutate({ seminarID: selected.seminarID, file });
+              }}>
                 <div>
-                  <div className={'font-semibold text-sm ' + (current || done ? '' : 'text-ink-muted')}>
-                    {name}
-                  </div>
-                  <div className="text-xs text-ink-muted">{subtitle}</div>
+                  <label htmlFor="registration-csv" className="mb-2 block text-sm font-medium">Registration CSV</label>
+                  <input ref={fileInput} id="registration-csv" className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-[var(--line)] file:bg-white file:px-3 file:py-2" type="file" accept=".csv,text/csv" required disabled={busy} onChange={event => {
+                    setFile(event.target.files?.[0] || null);
+                    setFeedback(null);
+                    upload.reset();
+                  }} />
                 </div>
-              </li>
-            );
-          })}
-        </ol>
-
-        <div className="sheet p-8 md:p-10 min-h-[560px] flex flex-col" key={step}>
-          {/* Stage 1: Attendance Upload */}
-          {step === 1 && (
-            <div className="flex-1 flex flex-col fade-view">
-              <p className="text-ink-soft mb-6 max-w-lg">
-                Upload the attendance export from the seminar. We'll read student IDs, emails and sign-in/out times.
-              </p>
-              <div
-                onDragOver={e => { e.preventDefault(); setDrag(true); }}
-                onDragLeave={() => setDrag(false)}
-                onDrop={e => { e.preventDefault(); setDrag(false); loadFile(e.dataTransfer.files[0]?.name); }}
-                onClick={() => !file && inputRef.current?.click()}
-                className={
-                  'flex-1 min-h-[300px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center p-10 transition-all ' +
-                  (drag
-                    ? 'border-forest bg-[#e7f4ec] scale-[1.01]'
-                    : file
-                    ? 'border-verified/40 bg-[#f4faf6]'
-                    : 'border-[#cfc7b0] bg-paper hover:border-forest cursor-pointer')
-                }
-              >
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={e => loadFile(e.target.files[0]?.name)}
-                />
-                {!file ? (
-                  <>
-                    <div className="w-20 h-20 rounded-2xl bg-white border border-[var(--line)] flex items-center justify-center mb-5">
-                      <i className="ph-duotone ph-file-csv text-4xl text-forest"></i>
-                    </div>
-                    <div className="font-serif text-3xl font-medium">
-                      {drag ? 'Release to upload' : 'Drag the attendance CSV here'}
-                    </div>
-                    <p className="text-ink-muted mt-2 mb-6">or click to browse your files</p>
-                    <Btn variant="line" size="sm" onClick={e => { e.stopPropagation(); loadFile(); }}>
-                      Use sample file
-                    </Btn>
-                  </>
-                ) : (
-                  <>
-                    <Seal status="Verified" size={72} animate />
-                    <div className="font-serif text-3xl font-medium mt-5">File read successfully</div>
-                    <div className="font-mono text-sm text-ink-muted mt-2">{file}</div>
-                    <div className="flex gap-6 mt-6 text-sm">
-                      {['150 rows', '6 columns', 'IDs matched'].map(t => (
-                        <span key={t} className="flex items-center gap-1.5 font-medium">
-                          <i className="ph-fill ph-check-circle text-verified"></i>
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); setFile(null); }}
-                      className="text-xs text-ink-muted hover:text-ink mt-6 underline"
-                    >
-                      Replace file
-                    </button>
-                  </>
-                )}
-              </div>
-              <div className="flex justify-end mt-8">
-                <Btn
-                  disabled={!file}
-                  className={!file ? 'opacity-40 pointer-events-none' : ''}
-                  iconRight="ph-arrow-right"
-                  onClick={() => setStep(2)}
-                >
-                  Continue to template
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          {/* Stage 2: Template */}
-          {step === 2 && (
-            <div className="flex-1 flex flex-col fade-view">
-              <p className="text-ink-soft mb-8 max-w-lg">
-                These are the actual certificates your recipients will receive. Pick a design.
-              </p>
-              <div className="grid md:grid-cols-3 gap-6">
-                {[['classic', 'Classic'], ['modern', 'Modern'], ['formal', 'Formal']].map(([t, name]) => (
-                  <button
-                    key={t}
-                    onClick={() => setTheme(t)}
-                    className={
-                      'text-left p-2.5 rounded-2xl border-2 transition-all ' +
-                      (theme === t
-                        ? 'border-forest bg-white shadow-lg -translate-y-1'
-                        : 'border-transparent hover:border-[var(--line)]')
-                    }
-                  >
-                    <Certificate cert={SAMPLE_CERT} theme={t} tilt={false} />
-                    <div className="flex items-center justify-between px-1.5 pt-3 pb-1">
-                      <span className="font-serif text-lg font-medium">{name}</span>
-                      {theme === t && <i className="ph-fill ph-check-circle text-forest text-xl"></i>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-between mt-auto pt-8">
-                <Btn variant="ghost" onClick={() => setStep(1)}>
-                  Back
-                </Btn>
-                <Btn iconRight="ph-arrow-right" onClick={() => setStep(3)}>
-                  Use {theme} template
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          {/* Stage 3: Review */}
-          {step === 3 && (
-            <div className="flex-1 flex flex-col fade-view">
-              <div className="grid md:grid-cols-[1fr_240px] gap-6 flex-1">
-                <div className="flex flex-col min-h-[340px]">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="eyebrow">Recipients ({filtered.length})</div>
-                    <input
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      placeholder="Search name or ID"
-                      className="field !py-2 !px-3 !text-sm !w-56"
-                    />
-                  </div>
-                  <div className="border border-[var(--line)] rounded-xl overflow-y-auto bg-white" style={{ maxHeight: 360 }}>
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-paper-2 text-left">
-                        <tr className="eyebrow">
-                          <th className="py-2.5 px-4">Student</th>
-                          <th className="px-4 hidden sm:table-cell">Email</th>
-                          <th className="px-4 text-right">Receives</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered.map(r => (
-                          <tr key={r.id} className="border-t border-[var(--line)] hover:bg-paper">
-                            <td className="py-2.5 px-4">
-                              <div className="font-medium">{r.name}</div>
-                              <div className="font-mono text-[11px] text-ink-muted">{r.id}</div>
-                            </td>
-                            <td className="px-4 text-ink-muted text-xs hidden sm:table-cell">{r.email}</td>
-                            <td className="px-4 text-right">
-                              <Pill status="Verified" />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                <p className="break-words text-xs leading-relaxed text-ink-soft">Required headers: <code>full_name,program,google_account</code>. Your <code>section</code> column and other extra columns are ignored. Maximum file size: 1 MB.</p>
+                <p className="text-xs leading-relaxed text-ink-soft">Existing student profiles and wallet links are kept. Reimporting adds only missing registrations; review the saved names below.</p>
+                {upload.error && <p role="alert" className="text-sm text-revoked">{upload.error.message}</p>}
+                <Btn type="submit" disabled={busy || !file}>{upload.isPending ? 'Importing...' : 'Import registrations'}</Btn>
+              </form>
+              {feedback && <p role="status" className="mt-4 rounded-xl bg-verified-bg p-4 text-sm text-verified">
+                {feedback.imported} registrations added; {feedback.alreadyRegistered} already registered; {feedback.duplicatesSkipped} duplicate CSV entries skipped. {feedback.newStudents} new student accounts created.
+              </p>}
+              <p className="mt-5 text-sm text-ink-soft">Registered students can sign in with their listed Google account and connect a wallet. Certificate issuance follows attendance and recipient approval.</p>
+              <h3 className="mb-3 mt-7 font-serif text-xl">Registered students</h3>
+              {registrations.isPending ? <p role="status">Loading registrations...</p> : registrations.error ? (
+                <div role="alert" className="space-y-3">
+                  <p className="text-sm text-revoked">{registrations.error.message}</p>
+                  <Btn variant="line" onClick={() => registrations.refetch()}>Try again</Btn>
                 </div>
-                <div className="space-y-4">
-                  <div className="rounded-2xl bg-paper-2 p-5 border border-[var(--line)]">
-                    <div className="eyebrow">Seminar</div>
-                    <div className="font-serif text-lg font-medium leading-tight mt-1">
-                      Sample Seminar
-                    </div>
-                    <div className="eyebrow mt-4">Template</div>
-                    <div className="font-serif text-lg capitalize">{theme}</div>
-                    <div className="eyebrow mt-4">Network</div>
-                    <div className="font-serif text-lg">Polygon PoS</div>
-                  </div>
-                  <div
-                    className="rounded-2xl p-5 text-sm"
-                    style={{ background: '#fbf1dc', border: '1px solid #ecd5a2', color: '#8a5508' }}
-                  >
-                    <i className="ph-fill ph-warning text-lg"></i>
-                    <p className="mt-1 font-medium">
-                      Students must accept the certificate and its burn policy before issuance.
-                      Credentials can be revoked later; burning follows the accepted policy.
-                    </p>
-                  </div>
+              ) : !registrations.data?.length ? <p className="text-sm text-ink-muted">No students registered for this seminar yet.</p> : (
+                <div className="overflow-x-auto rounded-xl border border-[var(--line)]">
+                  <table className="w-full min-w-[560px] text-left text-sm">
+                    <caption className="sr-only">Students registered for {selected.seminarTitle}</caption>
+                    <thead className="bg-paper-2"><tr>
+                      <th scope="col" className="p-3">Name</th><th scope="col" className="p-3">Google account</th>
+                      <th scope="col" className="p-3">Program</th><th scope="col" className="p-3">Wallet</th><th scope="col" className="p-3">Attendance</th>
+                    </tr></thead>
+                    <tbody>{registrations.data.map(student => <tr key={student.studentID} className="border-t border-[var(--line)]">
+                      <td className="p-3">{student.fullName}</td><td className="break-all p-3">{student.email}</td>
+                      <td className="p-3">{student.program}</td><td className="p-3">{student.walletConnected ? 'Connected' : 'Awaiting setup'}</td><td className="p-3">{student.attended ? 'Attended' : 'Not marked'}</td>
+                    </tr>)}</tbody>
+                  </table>
                 </div>
-              </div>
-              <div className="flex justify-between mt-8">
-                <Btn variant="ghost" onClick={() => setStep(2)}>
-                  Back
-                </Btn>
-                <Btn icon="ph-stamp" onClick={() => { setMinted(0); setStep(4); }}>
-                  Issue 142 certificates
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          {/* Stage 4: Issue */}
-          {step === 4 && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center fade-view py-6">
-              {minted < 142 ? (
-                <>
-                  <div className="relative w-40 h-40 flex items-center justify-center">
-                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120">
-                      <circle cx="60" cy="60" r="54" fill="none" stroke="#e9e3d3" strokeWidth="5" />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="54"
-                        fill="none"
-                        stroke="#0e3b2c"
-                        strokeWidth="5"
-                        strokeLinecap="round"
-                        strokeDasharray={339}
-                        strokeDashoffset={339 - (339 * minted) / 142}
-                        style={{ transition: 'stroke-dashoffset .2s' }}
-                      />
-                    </svg>
-                    <div className="font-serif text-5xl font-medium">{minted}</div>
-                  </div>
-                  <div className="font-serif text-3xl font-medium mt-8">Writing to the blockchain</div>
-                  <p className="text-ink-muted mt-2">
-                    {minted} of 142 credentials minted. Please keep this page open.
-                  </p>
-                  <div className="mt-8 space-y-3 text-left">
-                    {phases.slice(0, 3).map((p, i) => (
-                      <div
-                        key={p}
-                        className={
-                          'flex items-center gap-3 text-sm font-medium transition-opacity ' +
-                          (i > phase ? 'opacity-30' : '')
-                        }
-                      >
-                        {i < phase ? (
-                          <i className="ph-fill ph-check-circle text-verified text-xl"></i>
-                        ) : i === phase ? (
-                          <i className="ph-bold ph-circle-notch animate-spin text-forest text-xl"></i>
-                        ) : (
-                          <i className="ph ph-circle text-xl"></i>
-                        )}
-                        {p}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Seal status="Verified" size={150} animate />
-                  <div className="font-serif text-5xl font-medium mt-8">142 certificates issued</div>
-                  <p className="text-ink-soft mt-3 max-w-md">
-                    Every credential is confirmed on Polygon. Recipients have been emailed their verification links.
-                  </p>
-                  <div className="flex gap-6 mt-8 font-mono text-xs text-ink-muted">
-                    <span>Block #58,214,902</span>
-                    <span>Gas 0.0214 MATIC</span>
-                  </div>
-                  <div className="flex gap-3 mt-10">
-                    <Btn iconRight="ph-arrow-right" onClick={onComplete}>
-                      Back to workspace
-                    </Btn>
-                  </div>
-                </>
               )}
-            </div>
+              <AttendanceImport key={selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
+              <CertificatePreparation key={selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
+            </>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

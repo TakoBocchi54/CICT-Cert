@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { api } from './lib/api';
+import { useQuery } from '@tanstack/react-query';
 import { useWeb3Auth } from '@web3auth/modal/react';
 import TopNav from './components/TopNav';
 import LoginPage from './pages/LoginPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import StudentCollectionPage from './pages/StudentCollectionPage';
+import StudentCertificateApprovals from './components/StudentCertificateApprovals';
+import CertificateDownload from './components/CertificateDownload';
 import FacultyAccountPage from './pages/FacultyAccountPage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
@@ -67,6 +70,11 @@ function AppContent() {
   const [certificates, setCertificates] = useState(INITIAL_CERTS);
   const [selectedCertId, setSelectedCertId] = useState(null);
   const { web3Auth, isConnected } = useWeb3Auth();
+  const studentCertificates = useQuery({
+    queryKey: ['student-certificate-approvals', user?.studentID],
+    queryFn: ({ signal }) => api('/api/student/certificates', { signal }),
+    enabled: user?.role === 'student', retry: false, refetchOnWindowFocus: false,
+  });
 
 
   useEffect(() => {
@@ -181,7 +189,6 @@ function AppContent() {
 
   const handleCertificateClick = (cert) => {
     setSelectedCertId(cert.id);
-    // Navigate to certificate detail page (for future implementation)
   };
 
   const handleShareClick = (cert) => {
@@ -199,10 +206,6 @@ function AppContent() {
     console.log('Revoked:', certId, 'Reason:', reason);
   };
 
-  const handleIssueComplete = () => {
-    navigate('/faculty/dashboard');
-  };
-
   // Get current view for TopNav active state
   const currentView = ({
     '/student/dashboard': 'student-dashboard',
@@ -214,9 +217,12 @@ function AppContent() {
   })[location.pathname] || '';
 
   // Get student certificates
-  const studentCerts = user?.role === 'student' 
-    ? certificates.filter(c => c.email === user.email) 
-    : [];
+  const studentCerts = (studentCertificates.data || []).filter(certificate => ['ISSUED', 'REVOKED'].includes(certificate.status))
+    .map(certificate => ({ id: certificate.certificateNo, recipient: certificate.recipientName,
+      seminar: certificate.seminarTitle, iso: certificate.seminarDate, hash: certificate.certificateHash,
+      status: certificate.status === 'ISSUED' ? 'Verified' : 'Revoked', block: certificate.blockNum,
+      tokenID: certificate.tokenID, transactionHash: certificate.transactionHash }));
+  const selectedCertificate = user?.role === 'student' && studentCerts.find(certificate => certificate.id === selectedCertId);
 
   if (!isVerifierPage && checkingSession) {
     return (
@@ -279,14 +285,16 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentDashboardPage
+                  <StudentCertificateApprovals key={user.studentID} studentID={user.studentID} />
+                  {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
                     onCertificateClick={handleCertificateClick}
                     onShareClick={handleShareClick}
                     onVerifyClick={handleVerifyClick}
+                    onDownloadClick={handleCertificateClick}
                     onNavigateCollection={() => navigate('/student/collection')}
                     walletAddress={user.walletAddress}
-                  />
+                  />}
                 </main>
               </>
             ) : (
@@ -308,10 +316,12 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentCollectionPage
+                  <StudentCertificateApprovals key={user.studentID} studentID={user.studentID} />
+                  {!studentCertificates.isPending && !studentCertificates.error && <StudentCollectionPage
                     certificates={studentCerts}
                     onCertificateClick={handleCertificateClick}
-                  />
+                    onDownloadClick={handleCertificateClick}
+                  />}
                 </main>
               </>
             ) : (
@@ -381,7 +391,6 @@ function AppContent() {
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <IssuancePage 
-                    onComplete={handleIssueComplete}
                     onNavigateRegistry={() => navigate('/faculty/dashboard')}
                   />
                 </main>
@@ -436,6 +445,7 @@ function AppContent() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      {selectedCertificate && <CertificateDownload key={selectedCertificate.id} cert={selectedCertificate} onClose={() => setSelectedCertId(null)} />}
     </>
   );
 }

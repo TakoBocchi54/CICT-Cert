@@ -9,11 +9,13 @@ import authSessionRoutes from "./routes/authSession.js";
 import certificateRoutes from "./routes/certificates.js";
 
 import facultyAccountRoutes from "./routes/facultyAccount.js";
+import seminarRoutes from "./routes/seminars.js";
+import certificateApprovalRoutes from "./routes/certificateApprovals.js";
 
 const app = express();
 
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
 app.use("/api", healthRoutes);
@@ -24,5 +26,7 @@ app.use("/api", facultyAuthRoutes);
 app.use("/api", certificateRoutes);
 
 app.use("/api", facultyAccountRoutes);
+app.use("/api", seminarRoutes);
+app.use("/api", certificateApprovalRoutes);
 
 export default app;

@@ -63,6 +63,8 @@ for (const migrated of [false, true]) {
         await client.query(await sql("migrations/002_remove_replacement_link.sql"));
         await client.query(await sql("migrations/003_remove_failure_reason.sql"));
         await client.query(await sql("migrations/004_remove_certificate_created_at.sql"));
+        await client.query(await sql("migrations/005_signed_transaction.sql"));
+        await client.query(await sql("migrations/005_signed_transaction.sql"));
         const { rows: [profile] } = await client.query(`SELECT s."studentID", s."fullName", u."email", u."createdAt", w."studentWalletID"
           FROM student s JOIN users u USING ("userID") JOIN student_wallet w USING ("studentID") WHERE s."studentID" = 1`);
         assert.equal(profile.fullName, "Juan Dela Cruz");
@@ -74,6 +76,7 @@ for (const migrated of [false, true]) {
         assert.equal(oldNames.length, 0);
       }
       await client.query("BEGIN");
+      assert.equal((await client.query(`SELECT "signedTransaction" FROM blockchain_record LIMIT 1`)).rowCount, 0);
       await client.query(`INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy") VALUES ('Web Security', '2026-11-08', 1)`);
       await rejectsSQL(client, `INSERT INTO certificate ${draft}`, /fk_certificate_registration/);
       await client.query(`INSERT INTO seminar_registration ("seminarID", "studentID") VALUES (1, 1), (1, 2)`);

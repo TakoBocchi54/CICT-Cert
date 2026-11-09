@@ -23,6 +23,12 @@ const RESULTS = {
   },
 };
 
+const DETAILS_MESSAGES = {
+  Missing: 'This blockchain record has no certificate details available in this portal.',
+  Mismatch: 'The stored certificate details do not match this blockchain record and cannot be confirmed.',
+  Unavailable: 'The blockchain record was checked, but certificate details are temporarily unavailable. Please try again.',
+};
+
 const formatTime = value =>
   value === '0'
     ? '—'
@@ -183,7 +189,7 @@ export default function VerifierPortalPage({
                 <Seal status={banner.seal} size={100} animate />
               </div>
               <h1 className="mt-5 font-serif text-3xl sm:text-4xl">
-                {banner.title}
+                {result.status === 'Valid' && !result.certificate ? 'Blockchain record is valid' : banner.title}
               </h1>
               <p className="mt-3 text-white/80">
                 {banner.description}
@@ -191,6 +197,12 @@ export default function VerifierPortalPage({
             </div>
 
             <dl className="mt-6 rounded-2xl border border-paper-3 bg-paper p-6 shadow-sm sm:p-7">
+              {result.certificate && <>
+                <Row label="Recipient name">{result.certificate.recipientName}</Row>
+                <Row label="Seminar title">{result.certificate.seminarTitle}</Row>
+                <Row label="Seminar date">{result.certificate.seminarDate}</Row>
+                <Row label="Certificate number">{result.certificate.certificateNo}</Row>
+              </>}
               <Row label="Network">Polygon Amoy testnet</Row>
               <Row label="Certificate hash">{submittedHash}</Row>
               <Row label="Status">{result.status}</Row>
@@ -198,12 +210,19 @@ export default function VerifierPortalPage({
               {result.status !== 'NotFound' && (
                 <>
                   <Row label="Token ID">{result.tokenId}</Row>
+                  <Row label="Issuer wallet">{result.issuerAddress}</Row>
                   <Row label="Recipient wallet">{result.recipient}</Row>
                   <Row label="Issued">{formatTime(result.issuedAt)}</Row>
                   <Row label="Revoked">{formatTime(result.revokedAt)}</Row>
                 </>
               )}
             </dl>
+
+            {result.certificate && <p className="mt-4 text-sm text-ink-soft">These details match the certificate hash registered on the blockchain. Compare them with the certificate you received.</p>}
+            {DETAILS_MESSAGES[result.detailsStatus] && <div role="alert" className="mt-4 rounded-xl border border-paper-3 bg-paper p-4 text-sm text-ink-soft">
+              <p>{DETAILS_MESSAGES[result.detailsStatus]} Compare the certificate details before accepting it as proof.</p>
+              {result.detailsStatus === 'Unavailable' && <Btn variant="line" size="sm" className="mt-3" onClick={() => verification.refetch()}>Try again</Btn>}
+            </div>}
 
             <p className="mt-3 text-xs text-ink-muted">
               Dates use your browser’s local time.

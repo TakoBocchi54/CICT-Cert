@@ -9,7 +9,7 @@ const STATUS_CONFIG = {
   Pending: { color: '#a96a0c' },
 };
 
-export default function StudentDashboardPage({ certificates = [], onCertificateClick, onShareClick, onVerifyClick, onNavigateCollection, walletAddress }) {
+export default function StudentDashboardPage({ certificates = [], onCertificateClick, onShareClick, onVerifyClick, onDownloadClick, onNavigateCollection, walletAddress }) {
   const [copiedWallet, setCopiedWallet] = useState(false);
   
   const sortedCerts = [...certificates].sort((a, b) => b.iso.localeCompare(a.iso));
@@ -127,10 +127,10 @@ export default function StudentDashboardPage({ certificates = [], onCertificateC
             <Btn icon="ph-share-network" onClick={() => onShareClick(featured)}>
               Share credential
             </Btn>
-            <Btn variant="line" icon="ph-seal-check" onClick={() => onVerifyClick(featured.id)}>
+            <Btn variant="line" icon="ph-seal-check" onClick={() => onVerifyClick(featured.hash)}>
               Verify credential
             </Btn>
-            <Btn variant="ghost" icon="ph-download-simple">
+            <Btn variant="ghost" icon="ph-download-simple" onClick={() => onDownloadClick(featured)}>
               Download PDF
             </Btn>
             <div className="ml-auto">

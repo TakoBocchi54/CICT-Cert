@@ -15,6 +15,7 @@ if (!legacyTimezone) {
       "002_remove_replacement_link.sql",
       "003_remove_failure_reason.sql",
       "004_remove_certificate_created_at.sql",
+      "005_signed_transaction.sql",
     ]) {
       const sql = await readFile(new URL(`../sql/migrations/${name}`, import.meta.url), "utf8");
       await client.query(sql);

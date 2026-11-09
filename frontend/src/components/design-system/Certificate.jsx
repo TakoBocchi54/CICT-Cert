@@ -1,6 +1,7 @@
 import { Mark } from './Mark';
 import { Seal } from './Seal';
 import { Rosette } from './Rosette';
+import { QR } from './QR';
 
 const STATUS_CONFIG = {
   Verified: { color: '#157347', icon: 'ph-seal-check', word: 'VERIFIED' },
@@ -16,7 +17,7 @@ const SealCq = ({ status }) => (
   </div>
 );
 
-export const Certificate = ({ cert, theme = 'classic', tilt = true, className = '' }) => {
+export const Certificate = ({ cert, theme = 'classic', tilt = true, draft = false, verificationUrl, className = '' }) => {
   const ac = theme === 'modern' ? '#16231d' : theme === 'formal' ? '#7a5a1a' : '#0e3b2c';
   
   return (
@@ -51,16 +52,25 @@ export const Certificate = ({ cert, theme = 'classic', tilt = true, className = 
             <div className="font-script" style={{ fontSize: '4.2cqw', lineHeight: 1, color: ac }}>&nbsp;</div>
             <div style={{ borderTop: '1px solid #16231d55', marginTop: '.4cqw', paddingTop: '.6cqw', fontSize: '1.15cqw', letterSpacing: '.14em', fontWeight: 600, color: '#6a7a70' }}>SEMINAR COORDINATOR</div>
           </div>
-          <div style={{ marginBottom: '-.6cqw' }}><SealCq status={cert.status} /></div>
+          <div className="flex items-end gap-[2cqw]">
+            {verificationUrl && <a href={verificationUrl} className="flex flex-col items-center gap-[.4cqw] text-ink" aria-label="Verify this certificate">
+              <QR value={verificationUrl} size="12.5cqw" color="#000" />
+              <span className="text-[1.1cqw] font-semibold">Scan to verify</span>
+            </a>}
+            <div style={{ marginBottom: '-.6cqw' }}><SealCq status={cert.status} /></div>
+          </div>
         </div>
+        {cert.hash && !draft && <p className="mt-[1.2cqw] break-all font-mono text-[1cqw] leading-snug text-ink-muted">
+          <span className="font-sans font-semibold">Certificate hash: </span>{cert.hash}
+        </p>}
       </div>
       {cert.status !== 'Verified' && <div className={'cert-stamp ' + cert.status}>{STATUS_CONFIG[cert.status].word}</div>}
-      <div className="cert-reveal">
+      <div className="cert-reveal px-[3.4cqw] py-[.75cqw] text-[1.3cqw]">
         <span className="flex items-center gap-[.8cqw]" style={{ color: STATUS_CONFIG[cert.status]?.color || '#4b5563' }}>
-          <i className={'ph-fill ' + (STATUS_CONFIG[cert.status]?.icon || 'ph-question')} style={{ fontSize: '2.6cqw' }}></i>
-          {cert.status === 'Verified' ? 'Verified on Polygon' : cert.status === 'Revoked' ? 'Revoked by issuer' : 'Awaiting block confirmations'}
+          <i className={'ph-fill text-[1.8cqw] leading-none ' + (STATUS_CONFIG[cert.status]?.icon || 'ph-question')}></i>
+          {draft ? 'Draft - not issued' : cert.status === 'Verified' ? 'Verified on Polygon' : cert.status === 'Revoked' ? 'Revoked by issuer' : 'Awaiting block confirmations'}
         </span>
-        <span className="font-mono" style={{ color: '#6a7a70', fontWeight: 400 }}>Block #{cert.block?.toLocaleString() || '0'}</span>
+        {!draft && <span className="font-mono" style={{ color: '#6a7a70', fontWeight: 400 }}>Block #{cert.block?.toLocaleString() || '0'}</span>}
       </div>
     </div>
   );
