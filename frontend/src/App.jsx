@@ -67,7 +67,8 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState(null);
-  const [certificates, setCertificates] = useState(INITIAL_CERTS);
+  // The faculty dashboard summaries are not connected to backend data yet.
+  const certificates = INITIAL_CERTS;
   const [selectedCertId, setSelectedCertId] = useState(null);
   const { web3Auth, isConnected } = useWeb3Auth();
   const studentCertificates = useQuery({
@@ -197,13 +198,6 @@ function AppContent() {
 
   const handleVerifyClick = (certId) => {
     navigate(`/verify?id=${certId}`);
-  };
-
-  const handleRevoke = (certId, reason) => {
-    setCertificates(certs =>
-      certs.map(c => (c.id === certId ? { ...c, status: 'Revoked' } : c))
-    );
-    console.log('Revoked:', certId, 'Reason:', reason);
   };
 
   // Get current view for TopNav active state
@@ -414,7 +408,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <RevocationPage certificates={certificates} onRevoke={handleRevoke} />
+                  <RevocationPage />
                 </main>
               </>
             ) : (

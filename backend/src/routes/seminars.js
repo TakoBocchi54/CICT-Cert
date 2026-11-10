@@ -1,22 +1,13 @@
 import { Router } from "express";
 import { createHash } from "node:crypto";
 import { pool } from "../db/pool.js";
-import { requireFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
+import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { certificateIssuer } from "../services/certificates.js";
-import { issueCertificate, IssuanceError } from "../services/issuance.js";
+import { ensureIssuerWallet, issueCertificate, IssuanceError } from "../services/issuance.js";
 import { readRegistrationCsv, readAttendanceCsv, CsvError } from "../utils/seminarCsv.js";
 
 const router = Router();
-router.use("/faculty/seminars", requireFaculty, async (req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  const { rows } = await pool.query(
-    `SELECT f."facultyID" FROM cict_faculty f JOIN users u ON u."userID" = f."userID"
-     WHERE f."facultyID" = $1 AND u."userID" = $2 AND u."role" = 'FACULTY'`,
-    [req.faculty.facultyID, req.faculty.userID],
-  );
-  if (!rows.length) return res.status(401).json({ error: "Faculty account not found." });
-  next();
-});
+router.use("/faculty/seminars", requireFaculty, requireActiveFaculty);
 
 router.param("seminarID", (req, res, next, value) => {
   if (!/^[1-9]\d{0,18}$/.test(value) || BigInt(value) > 9223372036854775807n) {
@@ -231,16 +222,7 @@ router.post("/faculty/seminars/:seminarID/certificates/prepare", requireCanIssue
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "Confirm attendance before preparing certificates." });
     }
-    const { rows: issuers } = await client.query(
-      `INSERT INTO issuer_wallet ("issuerWalletAddress", label, network) VALUES ($1, 'CICT', 'polygon-amoy')
-       ON CONFLICT (lower("issuerWalletAddress")) DO UPDATE SET "issuerWalletAddress" = issuer_wallet."issuerWalletAddress"
-       RETURNING "issuerWalletID", "isActive", network`, [context.issuerAddress],
-    );
-    const issuer = issuers[0];
-    if (!issuer.isActive || issuer.network !== "polygon-amoy") {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ error: "The configured issuer wallet is inactive or belongs to a different network." });
-    }
+    const issuer = await ensureIssuerWallet(client, context);
     const prepared = await client.query(
       `INSERT INTO certificate ("studentID", "seminarID", "studentWalletID", "authorizedBy", "issuerWalletID",
                                "recipientName", "seminarTitle", "seminarDate")

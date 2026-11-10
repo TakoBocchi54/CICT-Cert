@@ -88,7 +88,7 @@ node scripts/createStudent.js student@example.com "Juan Dela Cruz" "BS Computer 
 
 After confirming final attendance, an authorized faculty account (`canIssue = true`) can select **Prepare pending certificates**. This reads `issuer()` from the configured Amoy contract and records its wallet in `issuer_wallet` if it is not already registered. An inactive issuer or a network mismatch blocks preparation. Only `AMOY_RPC_URL` and `CONTRACT_ADDRESS` are needed; no issuer private key is used by this step.
 
-Preparation creates one pending certificate per attendee, assigns a numeric certificate number, and saves the recipient name, seminar title, and seminar date as certificate snapshots. Missing wallets are allowed. Repeat preparation preserves existing numbers, snapshots and approvals. It does not automatically create replacements for revoked certificates; replacements will use an explicit workflow.
+Preparation creates one pending certificate per attendee, assigns a numeric certificate number, and saves the recipient name, seminar title, and seminar date as certificate snapshots. Missing wallets are allowed. Repeat preparation preserves existing numbers, snapshots and approvals. It does not automatically create replacements for revoked certificates; use **Prepare replacement** on the Revocations page instead.
 
 Students see pending certificates under **Certificate approvals** on their dashboard and collection. They open a review showing the certificate, issuer and recipient wallets, and the issuer-only revocation rule. **Approve with my wallet** signs the exact displayed message. The wallet linked to the registered Google account must sign. Linking a wallet during login is separate from approving a certificate. Students who link a wallet later can review their existing pending certificate without getting a new certificate number. Issued certificates appear in the existing dashboard and collection.
 
@@ -130,6 +130,25 @@ Public `GET /api/certificates/verify/:certHash` requires no login and checks the
 Students can select **Download PDF** on their dashboard or collection, review the certificate, and download a PDF file directly. The export renders only `Certificate.jsx`, at a fixed high resolution so mobile and desktop produce the same result. It preserves the template's `1.414:1` aspect ratio on a page 297 mm wide (approximately 210.04 mm high), with no extra page margins or print dialog. The certificate fills the single PDF page, with the scannable QR beside the bottom-right logo and the full certificate hash along the bottom. The PDF contains no clickable links; scan the QR to open public verification. The design is embedded as an image, so its text is not selectable in the PDF. The QR encodes `/verify?id=<certificateHash>` on the frontend's current origin; it contains no student email or authentication token. Generate shared PDFs from the deployed portal, because a QR generated on localhost points back to localhost. Verification remains public and checks the current blockchain status even if the PDF was saved before revocation. No PDF files or QR images are uploaded to another service.
 
 Frontend PDF and verification-link checks: run `node --test src/lib/certificatePdf.test.js src/lib/certificateVerificationUrl.test.js` from `frontend`.
+
+## Faculty revocation on Amoy
+
+Faculty look up a certificate by its numeric certificate number. Only an `ISSUED` certificate with a confirmed mint from the configured contract can be revoked, and a non-empty reason (up to 500 characters) is required. The reason is stored in PostgreSQL on the `REVOKE` blockchain record with `requestedBy`; the contract does not store text.
+
+| Method | Endpoint | Access |
+| --- | --- | --- |
+| GET | `/api/faculty/certificates/:certificateNo` | Faculty; certificate facts, token ID, mint transaction and latest revocation attempt |
+| POST | `/api/faculty/certificates/:certificateNo/revoke` | Faculty with current `canIssue`; `{ "reason": "..." }`; revoke or resume |
+| POST | `/api/faculty/certificates/:certificateNo/revocation/check` | Faculty with current `canIssue`; reconcile/resubmit the existing attempt, never sign a new one |
+| POST | `/api/faculty/certificates/:certificateNo/replacement` | Faculty with current `canIssue`; `{ "recipientName", "seminarTitle", "seminarDate" }`; prepare a replacement for a revoked certificate |
+
+Revocation uses the same safeguards as issuance: the seminar row lock, the shared issuer advisory lock and outstanding-transaction check (a pending mint blocks a revoke and vice versa), the on-chain `verify` precheck, simulation and balance check, and committing the signed payload before broadcast. The certificate becomes `REVOKED` with the chain's `revokedAt` only after the receipt is finalized, carries the matching `Revoked` event, and `verify` reports Revoked for the same token. A finalized revert marks only the attempt `FAILED`; the certificate stays `ISSUED` and may be retried. Uncertain broadcasts stay pending.
+
+### Correction by replacement
+
+Issued certificates are never edited. To correct one, revoke it, then select **Prepare replacement** on its card. Faculty enter the corrected recipient name, seminar title and seminar date (prefilled from the revoked certificate). These corrections are saved only on the new certificate; the student profile and seminar records are unchanged. The replacement is a new `PENDING` certificate with a new certificate number for the same registration, using the student's currently linked wallet. Preparing it sends no transaction.
+
+A replacement requires the original to be `REVOKED`, the registration to still be marked attended, and no other non-revoked certificate for that registration (only one replacement at a time). The student then approves the replacement's exact facts in the portal, and faculty issue it through the normal seminar issuance flow. The revoked original and its transaction history remain; the lookup shows the replacement's number and status, without a stored replacement link.
 
 ## Checks
 
