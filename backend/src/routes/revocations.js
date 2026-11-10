@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
+import { pool } from "../db/pool.js";
 import { IssuanceError } from "../services/issuance.js";
 import { findCertificate, prepareReplacement, revokeCertificate } from "../services/revocation.js";
 
@@ -11,6 +12,17 @@ router.param("certificateNo", (req, res, next, value) => {
     return res.status(400).json({ error: "Invalid certificate number." });
   }
   next();
+});
+
+// Registered before :certificateNo, which would otherwise reject "summary" as an invalid number.
+router.get("/faculty/certificates/summary", async (_req, res) => {
+  const list = (status, column) => pool.query(
+    `SELECT "certificateNo", "recipientName", "seminarTitle", "${column}" AS "at" FROM certificate
+     WHERE status = $1 ORDER BY "${column}" DESC LIMIT ${status === "ISSUED" ? 4 : 3}`, [status]);
+  const [counts, issued, revoked] = await Promise.all([
+    pool.query(`SELECT count(*) FILTER (WHERE status = 'ISSUED')::int AS "issuedCount", count(*) FILTER (WHERE status = 'REVOKED')::int AS "revokedCount" FROM certificate`),
+    list("ISSUED", "issuedAt"), list("REVOKED", "revokedAt")]);
+  res.json({ ...counts.rows[0], recentIssued: issued.rows, recentRevoked: revoked.rows });
 });
 
 router.get("/faculty/certificates/:certificateNo", async (req, res) => {

@@ -8,6 +8,7 @@ import { requireStudent } from "../middleware/requireStudent.js";
 import { secret } from "../utils/session.js";
 import { certificateContract, certificateIssuer } from "../services/certificates.js";
 import { certificateHash, certificateConsentMessage } from "../utils/certificateConsent.js";
+import { autoIssueTick } from "../services/autoIssue.js";
 
 const router = Router();
 const audience = "certificate-consent";
@@ -144,6 +145,7 @@ router.post("/student/certificates/:certificateID/consent", async (req, res) => 
       );
     }
     await client.query("COMMIT");
+    if (process.env.AUTO_ISSUE === "true") autoIssueTick(); // not awaited; it never rejects
     res.json({ approved: true });
   } catch (err) { await client.query("ROLLBACK"); throw err; }
   finally { client.release(); }

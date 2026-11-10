@@ -51,7 +51,7 @@ export default function StudentCertificateApprovals({ studentID }) {
         <div className="min-w-0 flex-1">
           <p className="break-words font-medium">{certificate.seminarTitle}</p>
           <p className="text-sm text-ink-soft">#{certificate.certificateNo} · {certificate.seminarDate}</p>
-          <p className="mt-1 text-sm text-ink-soft">{!certificate.attended ? 'On hold: attendance not confirmed' : !certificate.walletAddress ? 'Awaiting wallet setup' : certificate.consentedAt ? 'Approved; awaiting faculty issuance' : 'Awaiting your approval'}</p>
+          <p className="mt-1 text-sm text-ink-soft">{!certificate.attended ? 'On hold: attendance not confirmed' : !certificate.walletAddress ? 'Awaiting wallet setup' : certificate.consentedAt ? 'Approved; issuance in progress' : 'Awaiting your approval'}</p>
         </div>
         {!certificate.consentedAt && <Btn variant="line" size="sm" disabled={busy || !certificate.attended || !certificate.walletAddress} onClick={() => {
           approve.reset(); review.reset(); review.mutate(certificate.certificateID);

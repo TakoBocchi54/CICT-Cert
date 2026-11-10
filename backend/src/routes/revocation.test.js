@@ -245,4 +245,13 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip: 
     await db.query(`UPDATE seminar_registration SET attended=false WHERE ("seminarID","studentID") = (SELECT "seminarID","studentID" FROM certificate WHERE "certificateID"=$1)`, [absent.id]);
     assert.equal((await replace(absent)).status, 409);
   });
+
+  await t.test("dashboard summary needs a live faculty account and reports real counts and recent rows", async () => {
+    for (const session of ["", studentCookie]) assert.equal((await request("summary", { session })).status, 401);
+    const { status, data } = await request("summary");
+    const [issued, revoked] = ["ISSUED", "REVOKED"].map(async s => Number((await db.query(`SELECT count(*) FROM certificate WHERE status=$1`, [s])).rows[0].count));
+    assert.equal(status, 200); assert.equal(data.issuedCount, await issued); assert.equal(data.revokedCount, await revoked);
+    assert.ok(data.recentIssued.length <= 4 && data.recentRevoked.length <= 3 && data.recentRevoked.length > 0);
+    assert.deepEqual(Object.keys(data.recentRevoked[0]).sort(), ["at", "certificateNo", "recipientName", "seminarTitle"]);
+  });
 });

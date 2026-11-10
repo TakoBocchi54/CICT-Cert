@@ -15,51 +15,6 @@ import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
 import VerifierPortalPage from './pages/VerifierPortalPage';
 
-// Sample certificate data
-const hashOf = (s) => { 
-  let h = 2166136261; 
-  for (const c of s) { 
-    h ^= c.charCodeAt(0); 
-    h = Math.imul(h, 16777619) >>> 0; 
-  } 
-  return h; 
-};
-
-const hex = (s, n) => { 
-  let out = '', h = hashOf(s); 
-  while (out.length < n) { 
-    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; 
-    out += h.toString(16).padStart(8, '0'); 
-  } 
-  return out.slice(0, n); 
-};
-
-const mk = (id, recipient, email, seminar, iso, status) => ({
-  id, 
-  recipient, 
-  email, 
-  seminar, 
-  iso, 
-  status,
-  hash: '0x' + hex(id, 64), 
-  block: 58000000 + (hashOf(id) % 400000), 
-  confirmations: status === 'Pending' ? 3 : 128 + (hashOf(id) % 900),
-});
-
-const INITIAL_CERTS = [];
-
-// Shell component with TopNav
-function Shell({ children }) {
-  return (
-    <div className="min-h-screen pb-20">
-      {children}
-      <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view">
-        {children}
-      </main>
-    </div>
-  );
-}
-
 // Main app content with routing logic
 function AppContent() {
   const navigate = useNavigate();
@@ -67,8 +22,6 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState(null);
-  // The faculty dashboard summaries are not connected to backend data yet.
-  const certificates = INITIAL_CERTS;
   const [selectedCertId, setSelectedCertId] = useState(null);
   const { web3Auth, isConnected } = useWeb3Auth();
   const studentCertificates = useQuery({
@@ -192,10 +145,6 @@ function AppContent() {
     setSelectedCertId(cert.id);
   };
 
-  const handleShareClick = (cert) => {
-    // Share modal logic would go here
-  };
-
   const handleVerifyClick = (certId) => {
     navigate(`/verify?id=${certId}`);
   };
@@ -283,7 +232,6 @@ function AppContent() {
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
                     onCertificateClick={handleCertificateClick}
-                    onShareClick={handleShareClick}
                     onVerifyClick={handleVerifyClick}
                     onDownloadClick={handleCertificateClick}
                     onNavigateCollection={() => navigate('/student/collection')}
@@ -359,7 +307,6 @@ function AppContent() {
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <FacultyDashboardPage
-                    certificates={certificates}
                     onIssueClick={() => navigate('/faculty/issue')}
                     onNavigateRevocation={() => navigate('/faculty/revocation')}
                   />

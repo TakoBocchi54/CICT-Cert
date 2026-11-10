@@ -47,7 +47,7 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 - Attendance/eligibility calculation is outside scope. The final attendance CSV determines recipients.
 - Match registrations and attendance using the **Google account email**. Do not match using names or school student numbers.
 - Students without a linked wallet can remain pending. They are issued certificates only after wallet setup, certificate-specific approval, and faculty confirmation.
-- Issuance is initially triggered by a faculty button, not automatically on login or wallet connection. (An auto-issue-on-approval option was proposed on 10 November; see section 6, not yet decided.)
+- Issuance is never triggered by login or wallet connection. It is triggered by a faculty button, or, with `AUTO_ISSUE=true` (implemented 11 November, untested on Amoy), by a background worker after the student's certificate-specific approval. See `backend/README.md`.
 - Certificate details are recipient name, seminar title, seminar date, and an automatically generated numeric certificate number.
 - Use the portal/PDF presentation approach. Rich certificate artwork/metadata in external wallets is deferred.
 - A corrected issued certificate requires revoking the original and issuing a new certificate number. The explicit replacement workflow is implemented (10 November).

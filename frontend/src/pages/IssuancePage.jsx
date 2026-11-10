@@ -159,8 +159,8 @@ export default function IssuancePage({ onNavigateRegistry }) {
                   </table>
                 </div>
               )}
-              <AttendanceImport key={selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
-              <CertificatePreparation key={selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
+              <AttendanceImport key={'attendance-' + selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
+              <CertificatePreparation key={'prepare-' + selected.seminarID} seminarID={selected.seminarID} disabled={busy} />
             </>
           )}
         </section>

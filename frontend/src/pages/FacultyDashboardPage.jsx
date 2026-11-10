@@ -5,7 +5,6 @@ import { api } from '../lib/api';
 const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
 export default function FacultyDashboardPage({ 
-  certificates = [],
   onIssueClick,
   onNavigateRevocation
 }) {
@@ -15,13 +14,16 @@ export default function FacultyDashboardPage({
     retry: false,
     refetchOnWindowFocus: false,
   });
-  const recent = [...certificates]
-    .sort((a, b) => b.iso.localeCompare(a.iso))
-    .filter(c => c.status !== 'Revoked')
-    .slice(0, 4);
-  
-  const revoked = certificates.filter(c => c.status === 'Revoked').slice(0, 3);
-  const totalIssued = certificates.length;
+  const summary = useQuery({
+    queryKey: ['certificate-summary'],
+    queryFn: () => api('/api/faculty/certificates/summary'),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const recent = summary.data?.recentIssued || [];
+  const revoked = summary.data?.recentRevoked || [];
+  const totalIssued = summary.data?.issuedCount ?? 0;
+  const totalRevoked = summary.data?.revokedCount ?? 0;
 
   return (
     <div>
@@ -97,21 +99,23 @@ export default function FacultyDashboardPage({
         {/* Recently issued */}
         <section className="lg:col-span-7 sheet p-7 rise" style={{ '--d': '.12s' }}>
           <h3 className="font-serif text-2xl font-medium mb-3">Recently issued</h3>
-          {recent.length === 0 ? (
+          {summary.error ? (
+            <p role="alert" className="py-12 text-center text-sm text-revoked">{summary.error.message}</p>
+          ) : recent.length === 0 ? (
             <div className="text-center py-12 text-ink-muted">
-              <p>No certificates issued yet</p>
+              <p>{summary.isPending ? 'Loading...' : 'No certificates issued yet'}</p>
             </div>
           ) : (
             <>
               {recent.map(c => (
-                <div key={c.id} className="flex items-center gap-4 py-3.5 hair">
-                  <Seal status={c.status} size={40} />
+                <div key={c.certificateNo} className="flex items-center gap-4 py-3.5 hair">
+                  <Seal status="Verified" size={40} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{c.recipient}</div>
-                    <div className="text-xs text-ink-muted truncate">{c.seminar}</div>
+                    <div className="font-medium truncate">{c.recipientName}</div>
+                    <div className="text-xs text-ink-muted truncate">{c.seminarTitle}</div>
                   </div>
-                  <div className="font-mono text-xs text-ink-muted hidden sm:block">{c.id}</div>
-                  <Pill status={c.status} />
+                  <div className="font-mono text-xs text-ink-muted hidden sm:block">No. {c.certificateNo}</div>
+                  <Pill status="Verified" />
                 </div>
               ))}
               <div className="hair pt-5 mt-1 flex items-baseline gap-3">
@@ -128,20 +132,20 @@ export default function FacultyDashboardPage({
             <div>
               <div className="eyebrow">Revoked</div>
               <div className="font-serif text-6xl leading-none mt-2 text-revoked">
-                {revoked.length}
+                {totalRevoked}
               </div>
             </div>
             <Seal status="Revoked" size={64} />
           </div>
-          {revoked.length === 0 ? (
+          {totalRevoked === 0 ? (
             <p className="text-sm text-ink-muted mt-6">No revoked certificates</p>
           ) : (
             <>
               <div className="mt-6 space-y-3">
                 {revoked.map(c => (
-                  <div key={c.id} className="flex justify-between text-sm">
-                    <span className="font-medium">{c.recipient}</span>
-                    <span className="font-mono text-xs text-ink-muted">{c.id}</span>
+                  <div key={c.certificateNo} className="flex justify-between text-sm">
+                    <span className="font-medium">{c.recipientName}</span>
+                    <span className="font-mono text-xs text-ink-muted">No. {c.certificateNo}</span>
                   </div>
                 ))}
               </div>
