@@ -13,6 +13,7 @@ import FacultyAccountPage from './pages/FacultyAccountPage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
+import StudentsPage from './pages/StudentsPage';
 import VerifierPortalPage from './pages/VerifierPortalPage';
 
 // Main app content with routing logic
@@ -134,6 +135,7 @@ function AppContent() {
       'student-certificates': '/student/collection',
       'faculty-dashboard': '/faculty/dashboard',
       'faculty-issue': '/faculty/issue',
+      'faculty-students': '/faculty/students',
       'faculty-revocation': '/faculty/revocation',
       'faculty-account': '/faculty/account',
       'verify': '/verify',
@@ -155,6 +157,7 @@ function AppContent() {
     '/student/collection': 'student-certificates',
     '/faculty/dashboard': 'faculty-dashboard',
     '/faculty/issue': 'faculty-issue',
+    '/faculty/students': 'faculty-students',
     '/faculty/revocation': 'faculty-revocation',
     '/faculty/account': 'faculty-account',
   })[location.pathname] || '';
@@ -307,7 +310,7 @@ function AppContent() {
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <FacultyDashboardPage
-                    onIssueClick={() => navigate('/faculty/issue')}
+                    onIssueClick={seminarID => navigate('/faculty/issue' + (seminarID ? '?seminar=' + encodeURIComponent(seminarID) : ''))}
                     onNavigateRevocation={() => navigate('/faculty/revocation')}
                   />
                 </main>
@@ -356,6 +359,29 @@ function AppContent() {
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <RevocationPage />
+                </main>
+              </>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/faculty/students"
+          element={
+            user?.role === 'faculty' ? (
+              <>
+                <TopNav
+                  role="faculty"
+                  view={currentView}
+                  onNavigate={handleNavigate}
+                  onSignOut={handleSignOut}
+                  userName={user.name}
+                  userTitle={user.title}
+                />
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                  <StudentsPage />
                 </main>
               </>
             ) : (

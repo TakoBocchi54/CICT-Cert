@@ -123,6 +123,17 @@ test("faculty issuance with PostgreSQL and a local Amoy RPC fixture", { skip: !l
       status: reverted ? "0x0" : "0x1", logs: !reverted && validEvent ? [log] : [], transactionIndex: "0x0", gasUsed: "0x249f0", cumulativeGasUsed: "0x249f0", effectiveGasPrice: "0x3b9aca00", type: "0x2" });
     nonce++;
   }
+  await t.test("seminar list counts ready, awaiting-approval and issued certificates", async () => {
+    const counts = async seminarID => {
+      const row = (await (await fetch(base + "/faculty/seminars", { headers: { Cookie: faculty } })).json()).find(row => row.seminarID === seminarID);
+      return [row.readyCount, row.awaitingCount, row.issuedCount];
+    };
+    assert.deepEqual(await counts((await createCertificate()).seminarID), [1, 0, 0]);
+    assert.deepEqual(await counts((await createCertificate({ consent: false })).seminarID), [0, 1, 0]);
+    assert.deepEqual(await counts((await createCertificate({ attended: false })).seminarID), [0, 0, 0]);
+    const empty = (await db.query(`INSERT INTO seminar ("seminarTitle","seminarDate","createdBy") VALUES ('Empty','2026-11-09',1) RETURNING "seminarID"`)).rows[0];
+    assert.deepEqual(await counts(empty.seminarID), [0, 0, 0]);
+  });
   await t.test("requires a live authorized faculty account, valid IDs and matching seminar", async () => {
     const certificate = await createCertificate();
     for (const session of ["", studentCookie, await cookie("FACULTY", "999", "999")]) assert.equal((await post(certificate, session)).status, 401);

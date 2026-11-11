@@ -31,9 +31,9 @@ Deploy the migrated schema, backend, and frontend together: student responses no
 
 These are database safeguards. Signature verification for certificate consent, faculty issuance/revocation endpoints, chain receipt reconciliation, and PDF generation are separate implementation steps. The future issuing service must check attendance, faculty permission, the configured issuer, and the student's certificate-specific signature before sending a transaction. Issuance must coordinate using the same seminar row lock as attendance imports so attendance cannot change during approval of a blockchain attempt.
 
-## Seminar registration
+## Student accounts
 
-Faculty can create seminars and import registration CSVs from **Seminars** in the portal. This creates student accounts so those students can sign in with Google and link a wallet. Registration does not mark attendance or issue certificates.
+Registering a student's Google account is what lets them sign in. Students are accounts, not per-seminar registrations: faculty manage them in the **Students** tab, with bulk CSV upload, an **Add one student** form, and a searchable list. Registration does not mark attendance or issue certificates.
 
 The accepted CSV format is:
 
@@ -42,39 +42,46 @@ full_name,section,program,google_account
 Juan Dela Cruz,CS 3-1,BS Computer Science,juan.delacruz@gmail.com
 ```
 
-Only `full_name`, `program`, and `google_account` are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM.
+Only `full_name`, `program`, and `google_account` are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM. JSON rows (`POST /api/faculty/students`, 1–500 rows) get the same per-row checks (`readStudentRows` in `utils/seminarCsv.js`).
 
-Emails are trimmed and lowercased; Gmail plus tags and dots are preserved, and Google Workspace email domains are accepted. Identical repeated emails are counted once; conflicting names/programs for the same email within a file reject the entire import. Existing student names, programs, wallets, and attendance values are preserved. Reimporting adds missing registrations without duplicating accounts. The saved registration table shows the existing profile values for reused accounts.
+Emails are trimmed and lowercased; Gmail plus tags and dots are preserved, and Google Workspace email domains are accepted. Identical repeated emails are counted once; conflicting names/programs for the same email within one request reject it. Existing student names, programs and wallets are never changed, and re-registering an existing account is a no-op.
 
-All rows are validated before writing, and each import is a transaction. A faculty email or an existing student account with no student profile rejects the whole import, including newly inserted accounts. Concurrent imports are serialized per seminar. No real seminar or student records are seeded by the tests.
+All rows are validated before writing, and each request is one transaction (`registerStudents` in `services/students.js`). A faculty email or an existing student account with no student profile rejects the whole batch, including newly inserted accounts. No real student records are seeded by the tests.
 
-Faculty-only endpoints (session cookie required):
+**Removing a student** (`DELETE`, requires `canIssue`) is only allowed when the account never linked a wallet (so the student never finished signing in) and has no certificate in any status. It deletes the student's attendance rows, student row and user row in one transaction, with the student row locked so a concurrent wallet link or certificate waits. The list's `removable` flag shows which rows qualify.
+
+Faculty-only endpoints (session cookie of an active faculty account required):
 
 | Method | Endpoint | Body |
 | --- | --- | --- |
+| GET | `/api/faculty/students?q=` | — (search by name or email; first 200 matches) |
+| POST | `/api/faculty/students/import` | `{ "csv": "full_name,program,google_account\n..." }` |
+| POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "..." }] }` |
+| DELETE | `/api/faculty/students/:studentID` | — (`canIssue` only) |
 | GET | `/api/faculty/seminars` | — |
 | POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08" }` |
-| GET | `/api/faculty/seminars/:seminarID/registrations` | — |
-| POST | `/api/faculty/seminars/:seminarID/registrations/import` | `{ "csv": "full_name,program,google_account\n..." }` |
-| POST | `/api/faculty/seminars/:seminarID/attendance/preview` | `{ "csv": "google_account\n..." }` |
-| POST | `/api/faculty/seminars/:seminarID/attendance/import` | `{ "csv": "google_account\n...", "previewHash": "<returned by preview>" }` |
+| GET | `/api/faculty/seminars/:seminarID/registrations` | — (the seminar's attendance rows) |
+| POST | `/api/faculty/seminars/:seminarID/attendance/preview` | `{ "csv": "google_account\n...", "aliases": { "<listed email>": "<existing student email>" } }` |
+| POST | `/api/faculty/seminars/:seminarID/attendance/import` | `{ "csv": "...", "aliases": { ... }, "previewHash": "<returned by preview>" }` |
 
-`createdBy` is always taken from the signed-in faculty account. Faculty without issuance permission may prepare registrations; issuance and revocation will require `canIssue`. Seminars are shared across CICT faculty. The import returns counts for new registrations, existing registrations, new student accounts, and duplicate CSV rows skipped.
+Both student registration endpoints return `{ created, existing, duplicatesSkipped, students }`. `createdBy` on a seminar is always taken from the signed-in faculty account. Seminars are shared across CICT faculty; issuance and revocation require `canIssue`.
 
 ## Final attendance
 
-In the selected seminar, use **Import final attendance** to choose a CSV, review the matches, then **Confirm attendance**. Only the `google_account` header is required. The full export can include other columns, which are ignored:
+In the seminar's **Attendance** step, choose a CSV, review the matches, then **Confirm attendance**. Only the `google_account` header is required. `full_name` and `program`, when present, are used only to prefill registration of attendees who don't have an account yet. Other columns are ignored:
 
 ```csv
 full_name,section,program,student_id,google_account
 Juan Dela Cruz,CS 3-1,BS Computer Science,1234567,juan.delacruz@gmail.com
 ```
 
-- Attendance matches the normalized email against registrations for that specific seminar. Names and school student IDs are never used for matching. Attendance import never creates accounts or registrations and never changes profile names, programs, or wallets.
-- Duplicate emails count once. Unmatched emails block the whole save: faculty must correct the CSV or register those students for the seminar, then review again. There is no attendance-percentage or eligibility calculation.
-- A confirmed CSV is the **complete attendance list**, replacing the seminar's current attendance flags. Omitted registered students become absent. The review lists previously marked attendees whose attendance will be cleared. Empty/header-only CSVs are rejected to prevent accidentally clearing all attendance.
+- Attendance matches the normalized email against **all student accounts**. Names and school student IDs are never used for matching. Attendance import never creates accounts and never changes profile names, programs, or wallets.
+- The preview returns `matched`, `unregistered` (each with `fullName`/`program` hints from the CSV and up to 3 `suggestions`), `facultyEmails` (cannot become students), `removed`, `blocked` and `canSave`. Suggestions are existing students with the same part before `@` (which also catches domain typos such as `gmial.com`) or the same normalized name as the CSV hint. They only help a human decide; nothing is matched automatically.
+- `aliases` lets faculty say "this listed email is that existing student" after reviewing a suggestion. An alias key must be a listed email without its own account, and its target must be an existing student; otherwise the request fails with 409 and a fresh review is needed. Matched rows show `listedAs` for aliased emails.
+- Unregistered or faculty emails block the whole save. The portal offers to register the unregistered ones (`POST /api/faculty/students`) and then reviews again. Duplicate emails count once. There is no attendance-percentage or eligibility calculation.
+- A confirmed CSV is the **complete attendance list**. Confirming creates an attended `seminar_registration` row for each matched student (or marks the existing row attended) and marks this seminar's other rows absent. The review lists previously marked attendees whose attendance will be cleared. Empty/header-only CSVs are rejected to prevent accidentally clearing all attendance.
 - Students without wallets may be marked attended; the preview and save response report how many still need wallet setup. No certificates or transactions are created by this step.
-- A review does not save attendance. Confirmation resubmits that CSV and its server-provided `previewHash`. Changed CSV contents, registrations, attendance, or relevant certificate/transaction states invalidate the old review with HTTP 409. Review again before saving.
+- A review does not save attendance. Confirmation resubmits that CSV, the same aliases and the server-provided `previewHash`. The hash covers the listed emails, aliases, matched student IDs, faculty emails and this seminar's rows. Changed CSV contents, a newly registered listed student, changed attendance, or relevant certificate/transaction states invalidate the old review with HTTP 409. Review again before saving.
 - An issued certificate or unresolved blockchain attempt blocks clearing that recipient's attendance. A confirmed mint awaiting certificate reconciliation also blocks removal. Revoked certificate history remains intact.
 - Saves are transactional and serialized per seminar. Repeating review and confirmation with the same final list changes nothing. Other seminars' attendance is preserved.
 

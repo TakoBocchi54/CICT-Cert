@@ -61,7 +61,8 @@ router.get("/auth/faculty/me", requireFaculty, async (req, res) => {
     [req.faculty.facultyID]
   );
   if (rows.length === 0) return res.status(401).json({ error: "Account not found" });
-  res.json(rows[0]);
+  // autoIssue lets the seminar wizard show "issuing automatically" instead of an Issue button.
+  res.json({ ...rows[0], autoIssue: process.env.AUTO_ISSUE === "true" });
 });
 
 export default router;

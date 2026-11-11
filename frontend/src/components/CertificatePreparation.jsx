@@ -4,7 +4,8 @@ import { Btn } from './design-system';
 import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
 
-export default function CertificatePreparation({ seminarID, disabled }) {
+// mode 'approvals': prepare certificates and track student approvals. mode 'issue': mint approved certificates.
+export default function CertificatePreparation({ seminarID, disabled, mode }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [reviewingIssuance, setReviewingIssuance] = useState(false);
@@ -15,10 +16,13 @@ export default function CertificatePreparation({ seminarID, disabled }) {
     queryKey: ['seminar-certificates', seminarID],
     queryFn: () => api(`/api/faculty/seminars/${seminarID}/certificates`),
     retry: false, refetchOnWindowFocus: false,
+    // With auto-issuance the backend mints on its own, so the Issue step watches for changes.
+    refetchInterval: mode === 'issue' && faculty.data?.autoIssue ? 15_000 : false,
   });
+  const refreshCounts = () => queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] });
   const prepare = useMutation({
     mutationFn: () => api(`/api/faculty/seminars/${seminarID}/certificates/prepare`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] }),
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] }), refreshCounts()]),
   });
   const issue = useMutation({
     mutationFn: async ids => {
@@ -42,43 +46,50 @@ export default function CertificatePreparation({ seminarID, disabled }) {
     },
     onSettled: () => {
       setProgress('');
-      return queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] });
+      return Promise.all([queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] }), refreshCounts()]);
     },
   });
   const check = useMutation({
     mutationFn: id => api(`/api/faculty/seminars/${seminarID}/certificates/${id}/issuance/check`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] }),
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] }), refreshCounts()]),
   });
   const busy = disabled || prepare.isPending || issue.isPending || check.isPending;
   const ready = certificates.data?.filter(certificate => ['PENDING', 'FAILED'].includes(certificate.status) && certificate.attended &&
     certificate.walletConnected && certificate.consentedAt && certificate.transactionStatus !== 'PENDING') || [];
   const pending = certificates.data?.some(certificate => certificate.transactionStatus === 'PENDING');
-  return <section className="mt-8 border-t border-[var(--line)] pt-6">
-    <h3 className="font-serif text-2xl">Prepare certificates</h3>
-    <p className="mb-4 mt-2 text-sm text-ink-soft">Create pending certificates for confirmed attendees. Each receives a certificate number and can review and approve it in the student portal. Students without wallets stay pending.</p>
-    <p className="mb-4 text-sm text-ink-soft">Existing certificate numbers and approvals are preserved. This step does not issue tokens or spend POL.</p>
-    <div className="flex flex-wrap gap-3">
-      <Btn disabled={busy || !faculty.data?.canIssue} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Preparing...' : 'Prepare pending certificates'}</Btn>
-      <Btn variant="line" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh approvals</Btn>
-    </div>
-    {faculty.error && <p role="alert" className="mt-3 text-sm text-revoked">{faculty.error.message}</p>}
-    {faculty.data && !faculty.data.canIssue && <p className="mt-3 text-sm text-ink-soft">Your faculty account needs issuance permission to prepare certificates.</p>}
-    {prepare.error && <p role="alert" className="mt-4 text-sm text-revoked">{prepare.error.message}</p>}
-    {prepare.data && <p role="status" className="mt-4 text-sm text-verified">{prepare.data.prepared} certificates prepared; {prepare.data.alreadyPrepared} attendees already have certificate records; {prepare.data.awaitingWallet} attendees need wallet setup.</p>}
-    <div className="mt-5 space-y-3 rounded-xl border border-[var(--line)] bg-paper p-4">
-      <h4 className="font-medium">Issue approved certificates</h4>
-      <p className="text-sm text-ink-soft">{ready.length} ready for issuance. Only confirmed attendees with a linked wallet and saved approval can be issued. The issuer wallet pays Amoy POL for each transaction.</p>
-      {pending && <p className="text-sm text-pending">Check the pending transaction below before issuing more certificates.</p>}
-      {reviewingIssuance ? <>
-        <p className="text-sm">Issue {ready.length} certificates on Polygon Amoy? Issued details cannot be edited. Leaving this page stops the remaining batch; a submitted transaction can still finish.</p>
-        <div className="flex flex-wrap gap-3"><Btn disabled={busy || pending || !ready.length || !faculty.data?.canIssue} onClick={() => issue.mutate(ready.map(certificate => certificate.certificateID))}>Confirm issuance on Amoy</Btn><Btn variant="line" disabled={busy} onClick={() => setReviewingIssuance(false)}>Cancel issuance</Btn></div>
-      </> : <Btn disabled={busy || pending || !ready.length || !faculty.data?.canIssue || certificates.isFetching} onClick={() => { issue.reset(); check.reset(); setReviewingIssuance(true); }}>Review issuance ({ready.length})</Btn>}
-      {progress && <p role="status" className="text-sm">{progress}</p>}
-      {issue.error && <p role="alert" className="text-sm text-revoked">{issue.error.message}</p>}
-      {issue.data && <p role="status" className="text-sm text-verified">{issue.data}</p>}
-      {check.error && <p role="alert" className="text-sm text-revoked">{check.error.message}</p>}
-      {check.data && <p role="status" className="text-sm">{check.data.warning || (check.data.status === 'ISSUED' ? 'Issuance confirmed.' : check.data.status === 'FAILED' ? 'Transaction reverted. The certificate can be retried after resolving the cause.' : 'Transaction is pending. Check again shortly.')}</p>}
-    </div>
+  return <div>
+    {mode === 'approvals' ? <>
+      <p className="mb-2 text-ink-soft max-w-2xl">Each confirmed attendee gets a numbered certificate to review and approve with their wallet in the student portal. Students without a wallet stay pending until they connect one.</p>
+      <p className="mb-5 text-sm text-ink-muted max-w-2xl">Confirming attendance prepares certificates automatically. Run it again after adding attendees; existing numbers and approvals are kept. This does not mint or spend POL.</p>
+      <div className="flex flex-wrap gap-3">
+        <Btn variant="line" disabled={busy || !faculty.data?.canIssue} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Preparing...' : 'Prepare certificates'}</Btn>
+        <Btn variant="ghost" icon="ph-arrows-clockwise" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh approvals</Btn>
+      </div>
+      {faculty.error && <p role="alert" className="mt-3 text-sm text-revoked">{faculty.error.message}</p>}
+      {faculty.data && !faculty.data.canIssue && <p className="mt-3 text-sm text-ink-soft">Your faculty account needs issuance permission to prepare certificates.</p>}
+      {prepare.error && <p role="alert" className="mt-4 text-sm text-revoked">{prepare.error.message}</p>}
+      {prepare.data && <p role="status" className="mt-4 text-sm text-verified">{prepare.data.prepared} certificates prepared; {prepare.data.alreadyPrepared} attendees already have certificate records; {prepare.data.awaitingWallet} attendees need wallet setup.</p>}
+    </> : <div className="space-y-3">
+      {faculty.data?.autoIssue && <div role="status" className="rounded-2xl border border-[#bfe0cd] bg-verified-bg p-5 text-sm text-verified">
+        <p className="font-semibold flex items-center gap-2"><i className="ph-fill ph-lightning" aria-hidden="true"></i>Issuing automatically</p>
+        <p className="mt-1">Approved certificates are minted one at a time, about every 30 seconds, and each waits for finality. This list refreshes every 15 seconds. You can still issue manually below.</p>
+      </div>}
+      <div className="rounded-2xl border border-[var(--line)] bg-paper p-5 space-y-3">
+        <p className="font-serif text-4xl font-medium leading-none">{ready.length}</p>
+        <p className="eyebrow">Approved and ready to issue</p>
+        <p className="text-sm text-ink-soft">Only confirmed attendees with a linked wallet and saved approval can be issued. The issuer wallet pays Amoy POL for each transaction.</p>
+        {pending && <p className="text-sm text-pending">A transaction is confirming. Check it below before issuing more certificates.</p>}
+        {reviewingIssuance ? <div role="alert" className="rounded-xl p-4 text-sm space-y-3" style={{ background: '#fbf1dc', border: '1px solid #ecd5a2', color: '#8a5508' }}>
+          <p className="font-medium"><i className="ph-fill ph-warning mr-1" aria-hidden="true"></i>Issue {ready.length} certificates on Polygon Amoy? Issued details cannot be edited; a correction needs revocation and a new certificate. Leaving the page stops the remaining batch, but a submitted transaction can still finish.</p>
+          <div className="flex flex-wrap gap-3"><Btn icon="ph-stamp" disabled={busy || pending || !ready.length || !faculty.data?.canIssue} onClick={() => issue.mutate(ready.map(certificate => certificate.certificateID))}>Confirm issuance on Amoy</Btn><Btn variant="line" disabled={busy} onClick={() => setReviewingIssuance(false)}>Cancel</Btn></div>
+        </div> : <Btn icon="ph-stamp" disabled={busy || pending || !ready.length || !faculty.data?.canIssue || certificates.isFetching} onClick={() => { issue.reset(); check.reset(); setReviewingIssuance(true); }}>{faculty.data?.autoIssue ? 'Issue now' : 'Review issuance'} ({ready.length})</Btn>}
+        {progress && <p role="status" className="text-sm">{progress}</p>}
+        {issue.error && <p role="alert" className="text-sm text-revoked">{issue.error.message}</p>}
+        {issue.data && <p role="status" className="text-sm text-verified">{issue.data}</p>}
+        {check.error && <p role="alert" className="text-sm text-revoked">{check.error.message}</p>}
+        {check.data && <p role="status" className="text-sm">{check.data.warning || (check.data.status === 'ISSUED' ? 'Issuance confirmed.' : check.data.status === 'FAILED' ? 'Transaction reverted. The certificate can be retried after resolving the cause.' : 'Transaction is pending. Check again shortly.')}</p>}
+      </div>
+    </div>}
     {certificates.isPending ? <p role="status" className="mt-4">Loading certificates...</p> : certificates.error ? <p role="alert" className="mt-4 text-sm text-revoked">{certificates.error.message}</p> : !certificates.data.length ? <p className="mt-4 text-sm text-ink-soft">No certificates prepared yet.</p> : <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--line)]">
       <table className="w-full min-w-[500px] text-left text-sm">
         <caption className="sr-only">Prepared certificates and recipient approvals</caption>
@@ -96,5 +107,5 @@ export default function CertificatePreparation({ seminarID, disabled }) {
         </tr>)}</tbody>
       </table>
     </div>}
-  </section>;
+  </div>;
 }

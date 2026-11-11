@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { certificateIssuer } from "../services/certificates.js";
 import { ensureIssuerWallet, issueCertificate, IssuanceError } from "../services/issuance.js";
-import { readRegistrationCsv, readAttendanceCsv, CsvError } from "../utils/seminarCsv.js";
+import { readAttendanceCsv, googleEmail, CsvError } from "../utils/seminarCsv.js";
 
 const router = Router();
 router.use("/faculty/seminars", requireFaculty, requireActiveFaculty);
@@ -17,14 +17,25 @@ router.param("seminarID", (req, res, next, value) => {
 });
 
 router.get("/faculty/seminars", async (_req, res) => {
+  // readyCount: approved, not yet issued; awaitingCount: prepared, waiting for the student's approval.
   const { rows } = await pool.query(`
+    WITH certs AS (
+      SELECT c."seminarID",
+             count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NOT NULL AND c.status IN ('PENDING', 'FAILED'))::int AS "readyCount",
+             count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NULL AND c.status = 'PENDING')::int AS "awaitingCount",
+             count(*) FILTER (WHERE c.status = 'ISSUED')::int AS "issuedCount"
+      FROM certificate c JOIN seminar_registration cr USING ("seminarID", "studentID") GROUP BY c."seminarID")
     SELECT s."seminarID", s."seminarTitle", to_char(s."seminarDate", 'YYYY-MM-DD') AS "seminarDate", s."createdBy",
            count(r."studentID")::int AS "registrationCount",
            count(r."studentID") FILTER (WHERE r."attended")::int AS "attendanceCount",
-           count(w."studentWalletID")::int AS "walletCount"
+           count(w."studentWalletID")::int AS "walletCount",
+           coalesce(certs."readyCount", 0) AS "readyCount", coalesce(certs."awaitingCount", 0) AS "awaitingCount",
+           coalesce(certs."issuedCount", 0) AS "issuedCount"
     FROM seminar s LEFT JOIN seminar_registration r ON r."seminarID" = s."seminarID"
     LEFT JOIN student_wallet w ON w."studentID" = r."studentID"
-    GROUP BY s."seminarID" ORDER BY s."seminarDate" DESC, s."seminarID" DESC
+    LEFT JOIN certs ON certs."seminarID" = s."seminarID"
+    GROUP BY s."seminarID", certs."readyCount", certs."awaitingCount", certs."issuedCount"
+    ORDER BY s."seminarDate" DESC, s."seminarID" DESC
   `);
   res.json(rows);
 });
@@ -62,60 +73,26 @@ router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {
   res.json(rows);
 });
 
-router.post("/faculty/seminars/:seminarID/registrations/import", async (req, res) => {
-  const { students, duplicatesSkipped } = readRegistrationCsv(req.body?.csv);
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const seminar = await client.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1 FOR UPDATE`, [req.params.seminarID]);
-    if (!seminar.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Seminar not found." });
-    }
-    const data = JSON.stringify(students);
-    const emails = students.map(student => student.google_account);
-    // Stable email order avoids conflicting insert locks during imports for different seminars.
-    const createdUsers = await client.query(
-      `INSERT INTO users ("email", "role")
-       SELECT google_account, 'STUDENT' FROM jsonb_to_recordset($1::jsonb) AS csv(google_account text)
-       ORDER BY google_account ON CONFLICT ("email") DO NOTHING RETURNING "userID"`, [data],
-    );
-    const accounts = await client.query(
-      `SELECT u."userID", u."role", s."studentID" FROM users u
-       LEFT JOIN student s ON s."userID" = u."userID" WHERE u."email" = ANY($1::text[])`, [emails],
-    );
-    const newUserIDs = new Set(createdUsers.rows.map(user => user.userID));
-    if (accounts.rows.some(account => account.role !== "STUDENT" || (!account.studentID && !newUserIDs.has(account.userID)))) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ error: "An email belongs to a faculty account or an incomplete student profile. No registrations were imported; contact CICT to resolve the account." });
-    }
-    const profiles = await client.query(
-      `INSERT INTO student ("userID", "fullName", "program")
-       SELECT u."userID", csv.full_name, csv.program
-       FROM jsonb_to_recordset($1::jsonb) AS csv(full_name text, program text, google_account text)
-       JOIN users u ON u."email" = csv.google_account
-       ORDER BY u."userID" ON CONFLICT ("userID") DO NOTHING`, [data],
-    );
-    const registrations = await client.query(
-      `INSERT INTO seminar_registration ("seminarID", "studentID")
-       SELECT $1, s."studentID" FROM student s JOIN users u ON u."userID" = s."userID"
-       WHERE u."email" = ANY($2::text[]) ORDER BY s."studentID"
-       ON CONFLICT ("seminarID", "studentID") DO NOTHING RETURNING "studentID"`,
-      [req.params.seminarID, emails],
-    );
-    await client.query("COMMIT");
-    res.json({ imported: registrations.rowCount, alreadyRegistered: students.length - registrations.rowCount,
-      newStudents: profiles.rowCount, duplicatesSkipped });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
+// aliases: { "<listed email>": "<existing student email>" }, chosen by faculty from the "Did you mean?" suggestions.
+function readAliases(value, listed) {
+  const aliases = new Map();
+  if (value === undefined || value === null) return aliases;
+  if (typeof value !== "object" || Array.isArray(value)) throw new CsvError("Aliases must map listed emails to existing student emails.");
+  for (const [from, to] of Object.entries(value)) {
+    const email = googleEmail(from, "Alias");
+    if (!listed.has(email)) throw new CsvError(`Alias: ${email} is not in the attendance list.`);
+    aliases.set(email, googleEmail(to, "Alias"));
   }
-});
+  return aliases;
+}
 
+const normalName = name => name.trim().replace(/\s+/g, " ").toLowerCase();
+
+// Attendance is matched against every student account. Confirming replaces this seminar's attendance list: listed
+// students get an attended row (created when missing) and everyone else on the seminar is marked absent.
 router.post(["/faculty/seminars/:seminarID/attendance/preview", "/faculty/seminars/:seminarID/attendance/import"], async (req, res) => {
-  const { emails, duplicatesSkipped } = readAttendanceCsv(req.body?.csv);
+  const { emails, hints, duplicatesSkipped } = readAttendanceCsv(req.body?.csv);
+  const aliases = readAliases(req.body?.aliases, new Set(emails));
   const saving = req.path.endsWith("/import");
   if (saving && (typeof req.body.previewHash !== "string" || !/^[0-9a-f]{64}$/.test(req.body.previewHash))) {
     return res.status(400).json({ error: "Review the attendance CSV before confirming it." });
@@ -141,41 +118,83 @@ router.post(["/faculty/seminars/:seminarID/attendance/preview", "/faculty/semina
        LEFT JOIN student_wallet w ON w."studentID" = r."studentID"
        WHERE r."seminarID" = $1 ORDER BY r."studentID"`, [req.params.seminarID],
     );
-    const listedEmails = new Set(emails);
-    const registeredEmails = new Set(rows.map(row => row.email));
-    const matched = rows.filter(row => listedEmails.has(row.email));
-    const unmatched = emails.filter(email => !registeredEmails.has(email));
-    const removed = rows.filter(row => row.attended && !listedEmails.has(row.email));
+    const accounts = await client.query(
+      `SELECT u."email", u."role", s."studentID", s."fullName", (w."studentWalletID" IS NOT NULL) AS "walletConnected"
+       FROM users u LEFT JOIN student s ON s."userID" = u."userID"
+       LEFT JOIN student_wallet w ON w."studentID" = s."studentID"
+       WHERE u."email" = ANY($1::text[])`, [[...emails, ...aliases.values()]],
+    );
+    const byEmail = new Map(accounts.rows.map(row => [row.email, row]));
+    if ([...aliases].some(([from, to]) => byEmail.has(from) || byEmail.get(to)?.role !== "STUDENT" || !byEmail.get(to).studentID)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "A chosen account no longer applies: the listed email now has its own account, or the chosen student was removed. Review the CSV again." });
+    }
+    const current = new Map(rows.map(row => [row.studentID, row]));
+    const matched = new Map(), unregistered = [], facultyEmails = [];
+    for (const email of emails) {
+      const account = byEmail.get(aliases.get(email) ?? email);
+      if (account && account.role !== "STUDENT") facultyEmails.push(email);
+      else if (account?.studentID) {
+        if (!matched.has(account.studentID)) matched.set(account.studentID, { studentID: account.studentID, fullName: account.fullName,
+          email: account.email, listedAs: aliases.has(email) ? email : null, walletConnected: account.walletConnected,
+          attended: current.get(account.studentID)?.attended ?? false });
+      } else unregistered.push({ email, ...hints.get(email), suggestions: [] }); // incomplete profiles land here; registering them reports the conflict
+    }
+    if (unregistered.length) {
+      // "Did you mean?": same part before @ (this also covers domain typos such as gmial.com) or the same name as the CSV hint.
+      // shortcut: scans all student accounts on each preview; index these expressions if accounts reach tens of thousands.
+      const candidates = (await client.query(
+        `SELECT s."studentID", s."fullName", u."email" FROM student s JOIN users u ON u."userID" = s."userID"
+         WHERE u."role" = 'STUDENT' AND (split_part(u."email", '@', 1) = ANY($1::text[])
+           OR lower(regexp_replace(btrim(s."fullName"), '\\s+', ' ', 'g')) = ANY($2::text[]))
+         ORDER BY s."fullName", s."studentID"`,
+        [unregistered.map(row => row.email.split("@")[0]), unregistered.map(row => normalName(row.fullName)).filter(Boolean)],
+      )).rows;
+      for (const row of unregistered) {
+        const local = row.email.split("@")[0], name = normalName(row.fullName);
+        row.suggestions = candidates.filter(candidate => candidate.email.split("@")[0] === local || (name && normalName(candidate.fullName) === name)).slice(0, 3);
+      }
+    }
+    const unmatched = [...unregistered.map(row => row.email), ...facultyEmails];
+    const removed = rows.filter(row => row.attended && !matched.has(row.studentID));
     const blocked = removed.filter(row => row.attendanceLocked);
-    // Detect attendance or registration changes between review and confirmation without adding a version column.
+    // Detect account, alias or attendance changes between review and confirmation without adding a version column.
     const previewHash = createHash("sha256").update(JSON.stringify({ seminarID: req.params.seminarID,
-      emails: [...emails].sort(), registrations: rows.map(row => [row.studentID, row.email, row.attended, row.attendanceLocked]),
+      emails: [...emails].sort(), aliases: [...aliases].sort(), accounts: [...matched.keys()].sort(), facultyEmails: [...facultyEmails].sort(),
+      registrations: rows.map(row => [row.studentID, row.email, row.attended, row.attendanceLocked]),
     })).digest("hex");
+    const attendees = [...matched.values()];
     if (!saving) {
       await client.query("COMMIT");
-      return res.json({ previewHash, matched, unmatched, removed, blocked, duplicatesSkipped,
-        newlyAttended: matched.filter(row => !row.attended).length,
-        awaitingWallet: matched.filter(row => !row.walletConnected).length,
+      return res.json({ previewHash, matched: attendees, unregistered, facultyEmails, removed, blocked, duplicatesSkipped,
+        newlyAttended: attendees.filter(row => !row.attended).length,
+        awaitingWallet: attendees.filter(row => !row.walletConnected).length,
         canSave: unmatched.length === 0 && blocked.length === 0 });
     }
     if (req.body.previewHash !== previewHash) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Registrations or attendance changed since your review. Review the CSV again before saving." });
+      return res.status(409).json({ error: "Student accounts or attendance changed since your review. Review the CSV again before saving." });
     }
     if (unmatched.length || blocked.length) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: unmatched.length
-        ? "Some emails are not registered for this seminar. Correct the CSV or register those students, then review again. No attendance was changed."
+        ? "Some emails don't belong to a registered student. Register them or correct the CSV, then review again. No attendance was changed."
         : "Attendance cannot be cleared for students with an issued certificate or an unresolved blockchain transaction. No attendance was changed." });
     }
+    const ids = [...matched.keys()];
     await client.query(
-      `UPDATE seminar_registration SET "attended" = ("studentID" = ANY($2::bigint[]))
-       WHERE "seminarID" = $1 AND "attended" IS DISTINCT FROM ("studentID" = ANY($2::bigint[]))`,
-      [req.params.seminarID, matched.map(row => row.studentID)],
+      `INSERT INTO seminar_registration ("seminarID", "studentID", "attended")
+       SELECT $1, unnest($2::bigint[]), true ORDER BY 2
+       ON CONFLICT ("seminarID", "studentID") DO UPDATE SET "attended" = true WHERE seminar_registration."attended" IS DISTINCT FROM true`,
+      [req.params.seminarID, ids],
+    );
+    await client.query(
+      `UPDATE seminar_registration SET "attended" = false WHERE "seminarID" = $1 AND "attended" AND NOT ("studentID" = ANY($2::bigint[]))`,
+      [req.params.seminarID, ids],
     );
     await client.query("COMMIT");
-    res.json({ attended: matched.length, markedAttended: matched.filter(row => !row.attended).length,
-      markedAbsent: removed.length, awaitingWallet: matched.filter(row => !row.walletConnected).length, duplicatesSkipped });
+    res.json({ attended: attendees.length, markedAttended: attendees.filter(row => !row.attended).length,
+      markedAbsent: removed.length, awaitingWallet: attendees.filter(row => !row.walletConnected).length, duplicatesSkipped });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

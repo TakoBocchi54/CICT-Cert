@@ -1,6 +1,6 @@
 # CICT-Cert: Project context, progress, and next steps
 
-Updated: **10 November 2026 (Asia/Manila)**: faculty revocation and correction-by-replacement implemented; auto-issuance on student approval proposed (not started). See section 10 for where to resume.
+Updated: **12 November 2026 (Asia/Manila)**: student accounts are now separate from seminars (Students tab; attendance matched against all accounts, with a guarded "register them?" prompt), and the Seminars tab is a 4-step wizard. Earlier: revocation, replacement, optional auto-issuance, real faculty dashboard data and a test-data reset script. See section 10 for where to resume.
 
 This is a handoff for continuing the project. It records the agreed scope, the implementation currently in the workspace, checks completed during development, known gaps, and the recommended next task. Working locally does not mean the same changes are already deployed.
 
@@ -43,7 +43,7 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 - The contract has one immutable issuer address, without ownership transfer or multiple issuer roles.
 - Keep Solidity source pragma `^0.8.24`. This is a compatible compiler range, not an exact compiler pin. The current Hardhat configuration selects compiler **0.8.34** and EVM target `cancun`.
 - Use the guide `blockchain-smart-contract-guide.md` as background, adjusted to the actual repository and later decisions. Its sample counts, paths, optional functions, and older recommendations are not proof of implemented behavior.
-- Import seminar registrations before the seminar; import a final attendance list afterward.
+- Students are **accounts**, registered in the Students tab (bulk CSV or one at a time) or from the attendance preview; registering a Google account is what lets a student sign in. There is no per-seminar sign-up list. After each seminar, import its final attendance list, which is matched against all student accounts (12 November; replaces "import seminar registrations before the seminar").
 - Attendance/eligibility calculation is outside scope. The final attendance CSV determines recipients.
 - Match registrations and attendance using the **Google account email**. Do not match using names or school student numbers.
 - Students without a linked wallet can remain pending. They are issued certificates only after wallet setup, certificate-specific approval, and faculty confirmation.
@@ -62,9 +62,9 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 ## 3. Intended workflow and what currently works
 
 1. **Faculty creates a seminar** with title and date. The backend records the faculty creator.
-2. **Faculty imports registration CSV.** Student accounts and seminar registrations are created or reused.
+2. **Faculty registers students** in the Students tab (bulk CSV or one at a time). This creates the account their Google sign-in needs.
 3. **Students sign in with the registered Google account** and link their embedded wallet by signing a server-provided message.
-4. **Faculty imports final attendance**, reviews matches, then confirms the full list.
+4. **Faculty imports final attendance**, reviews matches (registering any unknown attendees from the preview, with typo suggestions), then confirms the full list. Confirming creates the seminar's attendance rows.
 5. **Faculty prepares pending certificates.** Each attendee receives a numbered certificate snapshot; missing wallets remain pending.
 6. **Students review and approve their individual certificates** with their linked wallet. This approval is distinct from wallet linking.
 7. **Faculty reviews and confirms issuance on Amoy.** The backend validates, signs, submits, and reconciles transactions.
@@ -91,7 +91,7 @@ The user confirmed successful local registration/attendance work, student-relate
 - Wallet links cannot silently replace an existing link or reuse another student's wallet.
 - Student responses use the CSV's `fullName` consistently.
 - Faculty account viewing, first/last name updates, and password changes are implemented. Password changes check the existing password, reject invalid new passwords, and handle concurrent changes.
-- Faculty creation is available through `backend/scripts/createFaculty.js`; registration import creates student accounts.
+- Faculty creation is available through `backend/scripts/createFaculty.js`; the Students tab (or the attendance preview) creates student accounts.
 
 Earlier local faculty login troubleshooting established that the local and deployed databases can contain different accounts. A successful deployed login does not prove the same account exists locally. Passwords and private credentials must not be copied into this handoff.
 
@@ -135,20 +135,22 @@ Migration files:
 
 Migration 005 was applied locally during this work. Production migration status is unverified. `schema.sql` is for a new, empty database only. The migration runner applies 001 through 005 in order and is not a general repeatable migration system. Check which migrations are already applied before running anything. Existing legacy certificate history may need a reviewed backfill; do not invent consent or rerun the initial migration over issued records.
 
-### Seminar registration and attendance
+### Student accounts and attendance
 
-- Faculty can create seminars, list them, and view registrations.
-- Registration accepts UTF-8 CSV with quoted values, escaped quotes, BOM, and CRLF support, up to 1 MB.
+Rewritten on 12 November: see "Done (12 November): student accounts separate from seminars" below and `backend/README.md`. The CSV rules here still apply to the Students tab upload.
+
+- Faculty can create seminars, list them, and view their attendance rows.
+- Student registration accepts UTF-8 CSV with quoted values, escaped quotes, BOM, and CRLF support, up to 1 MB.
 - Required registration fields are `full_name`, `program`, and `google_account`. Extra columns are ignored.
 - Emails are trimmed and lowercased; Gmail dots/plus tags are preserved, and Google Workspace domains are allowed.
 - Identical duplicate emails count once. Conflicting profiles for the same email within a file reject the import.
 - Existing names/programs/wallets and attendance are preserved when reusing accounts.
 - Reimports are idempotent. Faculty email conflicts and incomplete student accounts reject the entire import.
-- Final attendance matches Google emails to that seminar's registered students.
+- Final attendance matches Google emails to all student accounts; unregistered and faculty emails block the save until resolved.
 - Preview does not write. Confirmation requires the reviewed CSV and its server-generated preview hash.
-- Changed CSV/registration/attendance/certificate state requires a fresh preview rather than silently saving stale results.
-- The confirmed attendance file replaces the full attendance list: omitted registered students become absent.
-- Empty lists and unmatched emails are rejected. Attendance import never creates student accounts.
+- Changed CSV/aliases/accounts/attendance/certificate state requires a fresh preview rather than silently saving stale results.
+- The confirmed attendance file replaces the full attendance list: omitted students become absent.
+- Empty lists and unmatched emails are rejected. Attendance import itself never creates student accounts (the preview's prompt calls the Students endpoint).
 - Issued certificates and unresolved mint attempts prevent clearing relevant attendance.
 
 Registration example:
@@ -291,6 +293,88 @@ These addresses are public identifiers, not secrets. Reconfirm the configured de
 - Frontend: on a revoked certificate's card, **Prepare replacement** opens a dialog prefilled from the revoked snapshot. If a replacement already exists, the card shows "Replaced by certificate No. X" with a button to open it.
 - `backend/README.md` documents both revocation and replacement.
 
+### Auto-issuance, dashboard data and fixes (11 November)
+
+- **Optional auto-issuance** (`AUTO_ISSUE=true` in `backend/.env`; off by default). `backend/src/services/autoIssue.js` runs every 30 s (started from `server.js`) and right after each student approval (`routes/certificateApprovals.js`, not awaited). Each tick reconciles pending mints with `issueCertificate(..., allowNew=false)`, then issues approved certificates oldest first through the unchanged `issueCertificate` path.
+  - The issuing faculty member is `certificate.authorizedBy` (the preparer), and their `canIssue` is rechecked on every mint.
+  - It stops the tick after a new pending mint, a 503 or a pending issuer transaction. Any other certificate-level error skips that certificate.
+  - `FAILED` (reverted) certificates are never retried automatically. Only 20 candidates are read per tick (`shortcut:` comment in the code).
+  - Tests: `backend/src/services/autoIssue.test.js` (off switch, skipping an unauthorized preparer, a pending mint blocking new ones). **Not yet exercised on real Amoy.**
+  - Student card text now reads "Approved; issuance in progress". The faculty Issue/Check buttons remain a fallback.
+- **Faculty dashboard is connected.** `GET /api/faculty/certificates/summary` (any active faculty, registered before `:certificateNo` in `routes/revocations.js`) returns `issuedCount`, `revokedCount`, the 4 most recently issued and the 3 most recently revoked. `FacultyDashboardPage.jsx` fetches it itself. The Revoked number now shows the real total (it was capped at 3). Test added to `revocation.test.js`.
+- **Share credential removed** (handler, prop and button). Verify link and PDF download cover sharing.
+- **Sample-data cleanup in `App.jsx`:** removed `hashOf`, `hex`, `mk`, `Shell`, `INITIAL_CERTS` and the stale comment. `App.jsx` now lints clean.
+- **Bug fix:** the seminars/issuance page showed multiple "Import final attendance" sections. `AttendanceImport` and `CertificatePreparation` had the same `key` as siblings. They now use `attendance-<id>` and `prepare-<id>`. Reproduced and verified in a throwaway jsdom harness, not in a real browser.
+- **`backend/scripts/resetTestData.js`:** pre-deployment cleanup. Without `--yes` it prints the host and row counts and deletes nothing. With `--yes` it truncates `blockchain_record`, `certificate`, `seminar_registration`, `seminar`, `student_wallet` and `student` (restarting the certificate sequence) and deletes `STUDENT` users. It keeps faculty and `issuer_wallet`. Tested on a temporary schema only. It cannot touch anything already minted on-chain.
+
+### Mockup integration (`design/CICT-Cert-Ui.html`)
+
+The mockup is the original prototype; global CSS and the login, student, revocation and nav pages already match it. The user is integrating the rest **one step at a time, approving each feature first**. Not integrated by choice: the faculty issue wizard (our flow is CSV-driven), the fake "attendance processing" panel, the "upcoming seminars" list, the Verifications activity page (needs new logging), and the simulated QR scan. Share modal: not yet decided.
+
+- [x] **Step 1, faculty dashboard hero.**
+  - `GET /api/faculty/seminars` now also returns `readyCount` (attended, student-approved, `PENDING`/`FAILED`), `awaitingCount` (attended, prepared, not yet approved) and `issuedCount` per seminar.
+  - Compact dark hero (no certificate preview) for the **latest seminar** (newest date, then newest created), showing its next step in workflow order: ready to issue ("Begin issuance"), awaiting student approval, attendance not imported, certificates to prepare, or all issued.
+  - The button opens `/faculty/issue?seminar=<id>`, which preselects that seminar.
+  - Beside it, an **Issuance progress** panel replaces the mockup's fake attendance-processing panel: the 3 latest seminars, sorted latest to oldest, each with an issued-of-attended bar and ready and awaiting counts.
+  - Test added to `issuance.test.js`. Not yet viewed in a browser.
+- [x] **Seminars tab as a wizard** (`pages/IssuancePage.jsx`; 5 steps on 11 November, **4 steps since 12 November** after the Registrations step moved to the Students tab), following the mockup's stage rail but mapped to the real flow: Seminar (pick or create), Registrations, Attendance, Approvals, Issue. The mockup's Eligibility and Template stages were left out (no attendance rule; one certificate design).
+  - The rail is always clickable. A seminar opens at its first unfinished step, worked out from the seminar-list counts, and each step shows a done tick and a short count.
+  - All step panels stay mounted (hidden when inactive), so switching steps keeps files and running issuance batches.
+  - Shared `components/CsvDropZone.jsx` (drag-and-drop or browse) replaces the file inputs.
+  - Unsaved registration/attendance CSVs and the attendance preview are kept in session storage per seminar (`lib/sessionDraft.js`), surviving tab switches and reloads until imported or confirmed. A stale preview is still rejected by the server on confirm.
+  - Once a seminar has registrations or confirmed attendance, the upload box is replaced by a green done card (`components/DoneCard.jsx`) with **Add late registrants** / **Correct attendance** to reveal it again. A saved draft keeps the box open.
+  - **Confirming attendance now also prepares certificates** (if the faculty member has `canIssue`) and jumps to Approvals. A failed preparation is reported without undoing the saved attendance.
+  - `CertificatePreparation` takes `mode="approvals" | "issue"`. `GET /api/auth/faculty/me` now returns `autoIssue`. With it on, the Issue step shows "Issuing automatically", refreshes every 15 s and keeps "Issue now" as a fallback.
+  - Checked with lint, build and a jsdom harness (step selection, rail clicks, draft surviving a remount). Not yet viewed in a real browser.
+- [ ] Custom faculty certificate templates (upload their own design): agreed as a separate feature after the wizard.
+- [ ] Step 2, public verifier restyle (hero, "Inspecting credential..." steps, colored result banner). Ask about the QR-scan tab first.
+- [ ] Step 3, faculty Registry page (new endpoint, route and nav item).
+- [ ] Step 4, certificate detail page.
+- [ ] Step 5, Share modal, only if the user wants it.
+
+### Done (12 November): student accounts separate from seminars
+
+**Status.** Phases 1 to 5 below are implemented. Backend `npm test`: **101 passed**. Frontend: ESLint clean on the changed files, production build passes, and the jsdom harness checked the Students page (list, search, Remove only on removable rows with confirmation, single add) and the attendance prompt (4-step rail, faculty-email error, suggested row unticked, prefilled name, "Use this account" sends an alias, Register re-runs the preview, the guard 4 file check). **Not yet viewed in a real browser.**
+
+Differences from the plan: no separate domain-typo list, because the "same part before `@`" rule already catches `gmial.com` and the other typos (tested). The preview no longer returns `unmatched`; it returns `unregistered` and `facultyEmails`. Choosing "Use this account" re-runs the preview, which resets edits made in other prompt rows (accepted).
+
+
+**Why.** Registration exists so a Google account can sign in; registering per seminar adds nothing. Students become accounts managed in a new **Students** tab. The seminar wizard drops to 4 steps (Seminar, Attendance, Approvals, Issue), and attendance is matched against **all** student accounts. Unregistered attendees are offered for registration from the attendance preview, with five guards against creating wrong accounts. This replaces the settled decision "import seminar registrations before the seminar" (section 2). There is **no schema change**: `seminar_registration` stays and is now created by confirming attendance.
+
+**Phase 1: backend student accounts** (new `services/students.js`, `routes/students.js`, `routes/students.test.js`)
+- Extract the account-creating half of today's registration import into `registerStudents(client, students)`, with the same rules: emails normalized, existing accounts reused (name/program untouched), faculty emails and incomplete profiles reject the whole batch, idempotent. Extract the per-row validation out of `readRegistrationCsv` so JSON rows get identical checks.
+- `GET /api/faculty/students?q=`: search by name or email; returns name, program, email, wallet connected, number of seminars attended, number of certificates, `removable`.
+- `POST /api/faculty/students/import` `{ csv }` (bulk, same CSV format) and `POST /api/faculty/students` `{ students: [{ fullName, program, googleAccount }] }` (1–N rows; used by the single-student form and the attendance prompt).
+- **Guard 5, undo:** `DELETE /api/faculty/students/:studentID`, allowed only with no linked wallet (so the student never completed sign-in) and no certificate in any status. It removes the attendance rows, then the student and user rows, in one transaction. Requires `canIssue`; the others need an active faculty account (as imports do today).
+
+**Phase 2: backend attendance against all accounts** (`routes/seminars.js`, `utils/seminarCsv.js`, tests)
+- `readAttendanceCsv` also reads the optional `full_name` and `program` columns as hints for unregistered rows. Extra columns stay ignored.
+- Preview/import match every listed email against all student accounts. On confirm: upsert `seminar_registration` with `attended = true` for matched students, and set `false` for this seminar's other rows. Unchanged: whole-list replacement, removal blocked for issued/pending students, `previewHash` (now also covering matched student IDs and aliases), and 409 on a stale preview.
+- The preview splits unmatched emails into `unregistered` (with name/program hints) and `facultyEmails` (cannot become students).
+- **Guard 1, "Did you mean?":** each unregistered email gets `suggestions` of existing students with the same part before `@`, a known domain typo (`gmial.com`, `gmai.com`, `gamil.com`, `gmail.co`, `gmail.con` → `gmail.com`), or the same normalized name as the CSV hint.
+- Preview/import accept `aliases: { "<listed email>": "<existing student email>" }` so faculty can say "use the existing account". Aliases are validated server-side and included in the hash.
+- Remove `POST /faculty/seminars/:id/registrations/import`. Keep `GET .../registrations` (now the seminar's attendee rows). Seminar counts keep their fields; the UI stops showing "registered".
+
+**Phase 3: Students tab** (new `pages/StudentsPage.jsx`, `/faculty/students` route, nav item)
+- Bulk upload (`CsvDropZone`, session draft), an **Add one student** form, and a searchable list with wallet status and seminar/certificate counts.
+- **Remove** appears only on removable rows, behind a confirmation dialog.
+
+**Phase 4: wizard and attendance prompt** (`IssuancePage.jsx`, `AttendanceImport.jsx`, dashboard hero)
+- 4 steps; the Registrations step is gone. The dashboard hero's "attendance not imported" state shows no student count.
+- The preview shows "**N students in this list aren't registered yet. Register them?**" with one row each:
+  - **Guard 2:** a checkbox per row, unchecked when the row has a suggestion.
+  - **Guard 3:** editable name and program, prefilled from the CSV.
+  - **Guard 1:** a "Did you mean Juan Dela Cruz (juan.delacruz@gmail.com)? Use this account" button, which adds an alias.
+  - Faculty-email rows are shown as errors that can't be registered.
+- **Register selected** calls `POST /faculty/students`, then re-runs the preview automatically. Confirm stays disabled until everything matches.
+- **Guard 4:** when at least half the list (and 10 or more rows) is unregistered, show "180 of 200 aren't registered. Is this the right file?" and require ticking "I checked this is the right attendance file" before Register is enabled.
+
+**Phase 5: docs.** `backend/README.md` (endpoints, attendance rules), this file's settled decisions (section 2) and workflow (section 3), and the CLAUDE.md lifecycle step 1.
+
+**Tests.** New `students.test.js` (bulk, single, validation, faculty-email rejection, idempotence, search, delete allowed/blocked, auth). Rewritten attendance tests in `seminars.test.js` (all-account matching, rows created on confirm, aliases, each suggestion rule, hints, faculty emails, stale hash after registering, removal/blocking unchanged). Registration-import tests moved to the students tests. Frontend: lint, build and the jsdom harness. Every phase ends with `npm test` green.
+
+**Accepted limits.** No per-seminar sign-up list before the event. No profile editing outside the attendance prompt (name fixes after issuance remain revoke-and-replace). "Never signed in" is approximated by "no linked wallet".
+
 ## 5. Certificate hash, statuses, and explorer context
 
 The certificate hash is **Keccak-256 of a canonical data object**, not a hash of the PDF file. `backend/src/utils/certificateConsent.js` defines the exact encoding and field order:
@@ -321,15 +405,10 @@ The public portal confirms saved certificate facts against the chain. It does no
 
 ### Priority 0: housekeeping before new work
 
-- [ ] **Commit this session's work.** Nothing from 10 November is committed (one commit attempt was declined). Uncommitted:
-  - modified: `backend/README.md`, `backend/src/app.js`, `backend/src/middleware/requireFaculty.js`, `backend/src/routes/seminars.js`, `backend/src/services/issuance.js`, `frontend/src/App.jsx`, `frontend/src/pages/RevocationPage.jsx`
-  - new: `backend/src/services/revocation.js`, `backend/src/routes/revocations.js`, `backend/src/routes/revocation.test.js`, root `CLAUDE.md` (created this session for Claude Code), and this `PROJECT_PROGRESS.md` (also untracked)
-- [ ] Manually test the replacement flow end to end:
-  1. Look up revoked No. 1 and prepare a replacement. It should get the next number, likely No. 12.
-  2. Approve it as the student.
-  3. Issue it from the seminar page. This is a real Amoy mint.
-  4. Confirm `/verify` shows the corrected facts and that No. 1 shows "Replaced by".
-- [ ] No browser automation was run for the new Revocations page or the replacement dialog. An automated check was prepared, but signing a local faculty session cookie was declined. Options: the user logs in through a visible browser, or checks manually.
+- [x] 10 November work (revocation and replacement) committed by the user.
+- [x] Auto-issuance, the key fix, the reset script, the dashboard summary and the Share removal are committed. Only this file's 11 November update is uncommitted.
+- [ ] Confirm on real Amoy: auto-issuance (approve as a student with `AUTO_ISSUE=true`, wait about 30 s) and the replacement flow (revoke, prepare replacement, approve, issue, check `/verify` and the "Replaced by" label). The user did a round of three-Google-account testing on 11 November; the outcome of these two checks was not recorded.
+- [ ] No browser automation has run on the Revocations page or the replacement dialog.
 
 ### Priority 1: real faculty revocation (done 10 November)
 
@@ -345,39 +424,26 @@ The public portal confirms saved certificate facts against the chain. It does no
 - [x] Old certificate and transaction history preserved; no replacement-link field was added.
 - [x] Ordinary repeated preparation still never creates replacements; the existing test for this still passes.
 
-### Proposed next: auto-issuance on student approval (awaiting decision)
+### Auto-issuance on student approval (done 11 November, pending real-Amoy check)
 
-The user asked whether a student's approval could issue the certificate automatically. The proposed design has not been started:
-
-- Treat faculty **Prepare certificates** (which already requires `canIssue` and records `authorizedBy`) as the issuance authorization. Auto-mints use that faculty as `requestedBy`, rechecking their current `canIssue`.
-- Do **not** mint inside the approval request. The issuer allows only one pending transaction at a time, so concurrent approvals would conflict. Instead, run a small in-process worker every ~20–30 s, and also trigger it right after each approval. It:
-  1. reconciles any pending issuer transaction
-  2. if none is pending, issues the oldest approved certificate through the existing `issueCertificate` path
-  3. repeats
-- The existing advisory lock keeps it safe across instances. The faculty issue and check buttons remain as a manual fallback.
-- Add an on/off switch (`AUTO_ISSUE=true` in `backend/.env`), an "Issuing…" state for students, and a note on the faculty seminar page when auto-issuance is waiting (for example, no POL or a pending transaction). Add tests using the existing fake RPC server, and update the settled decision in section 2.
-- Trade-offs to accept:
-  - there is no faculty review just before minting; the student's own review on the approval screen is the last check
-  - Render's free tier sleeps when idle, delaying mints until the next request wakes it
-  - POL exhaustion leaves approvals waiting
-  - batches are still minted one at a time
+Implemented as designed; see section 4. Accepted trade-offs: no faculty review right before minting (the student's approval is the last check), a sleeping host mints only once awakened, missing POL leaves approvals waiting, and mints are one at a time (each waits for finality).
 
 ### Priority 3: connect remaining faculty certificate views and sharing
 
-- [ ] Connect the faculty dashboard's recently issued/revoked sections and counts to real backend certificate data. Seminar counts are connected; the certificate summaries still receive the static `INITIAL_CERTS` (empty) constant in `App.jsx`.
+- [x] Faculty dashboard issued/revoked sections and counts connected to real data (11 November).
 - [x] Replace the revocation page's sample credential-number placeholder with the numeric format (done with the revocation rewrite).
-- [ ] Implement or remove **Share credential**. Its current handler is a placeholder; verification and PDF download already work.
-- [ ] Remove obsolete sample-data helpers/local state after their remaining consumers are connected.
+- [x] **Share credential** removed (11 November).
+- [x] Obsolete sample-data helpers removed from `App.jsx` (11 November).
 
 ### Priority 4: integration, presentation, and release checks
 
 - [ ] Address deferred UI/UX issues after the functional workflows are complete.
 - [ ] Check longer names/seminar titles, small screens, keyboard navigation, dialogs, loading/error states, and target browsers beyond the Edge checks performed so far.
 - [ ] Confirm whether an actual coordinator signature/name or other final artwork changes are required; the current coordinator area is a design placeholder.
-- [ ] Resolve existing `App.jsx` lint findings as part of finishing its placeholder wiring. Targeted changed-file lint passes; the project-wide lint baseline is not clean.
+- [x] `App.jsx` lint findings resolved. The project-wide lint baseline has not been re-checked.
 - [ ] Review existing build warnings: CSS font import order and large bundles. Builds pass, but these warnings remain.
 - [ ] Update the template root/Hardhat READMEs and stale early paragraphs in the backend README. In particular, older paragraphs still call already-implemented consent/issuance/PDF work future work and mention migration 001-004, while the runner now includes 005.
-- [ ] Review and commit the current tracked modifications **and new untracked implementation/test/migration files** before handing the branch to another developer.
+- [ ] **Fresh contract and clean data before going live:** deploy a new contract (`npx hardhat run scripts/deploy.ts --network amoy`, spends test POL) and set `CONTRACT_ADDRESS`. Then reset the test data (`node scripts/resetTestData.js`, then `--yes`) on the right database after a backup. Do the deploy before the reset: certificate hashes include the contract address. Old test mints stay on the old contract permanently.
 - [ ] Back up and migrate the deployed database through the required changes, checking its existing history and original timestamp timezone first.
 - [ ] Deploy frontend/backend together and verify their API routing, HTTPS cookies, CORS, Web3Auth configuration, public `/verify` deep links, and contract/RPC settings in the actual hosting arrangement.
 - [ ] Test the full workflow on the deployed portal with dedicated test accounts and a small deliberate Amoy issuance/revocation.
@@ -392,8 +458,8 @@ These are the latest completed checks from development, not newly rerun for this
 
 | Check | Latest recorded result |
 | --- | --- |
-| Backend `npm test` | **88 passed** on 10 November (79 earlier + 9 for revocation/replacement), including PostgreSQL integration tests and public verification checks |
-| Revocations page (frontend) | ESLint clean and production build passes on 10 November; no browser automation run yet |
+| Backend `npm test` | **101 passed** on 12 November (after the student-accounts rewrite; 93 on 11 November), including PostgreSQL integration tests and public verification checks |
+| Frontend lint/build | ESLint clean on the changed files and the production build passes (11 November); no real-browser run of the Revocations page, replacement dialog, new dashboard or the key fix |
 | Real Amoy revocation | User confirmed through the portal on 10 November (No. 1) |
 | Frontend PDF/QR Node tests | **4 passed**, including one-page dimensions and no clickable PDF annotations |
 | Frontend production build | Passed; existing font-import/bundle warnings remain |
@@ -484,6 +550,7 @@ SESSION_SECRET
 AMOY_RPC_URL
 CONTRACT_ADDRESS
 ISSUER_PRIVATE_KEY
+AUTO_ISSUE   (optional; "true" enables auto-issuance)
 ```
 
 Frontend `.env`: `VITE_WEB3AUTH_CLIENT_ID`.
@@ -495,7 +562,7 @@ Keep `.env`, issuer private keys, passwords, cookie values, identity tokens, con
 ## 9. Short adviser/demo walkthrough
 
 1. Explain that student identity, certificate presentation, and blockchain verification are separate parts of the system.
-2. Sign in as authorized faculty. Show a seminar and registration import; explain that registration is not attendance or issuance.
+2. Sign in as authorized faculty. Show the Students tab and explain that registering a Google account only enables sign-in; it is not attendance or issuance.
 3. Show the final attendance preview and confirmation.
 4. Prepare pending certificates. Point out a recipient waiting for wallet setup versus one awaiting approval.
 5. Sign in as a registered student, show the linked wallet, and review/approve a specific certificate.
@@ -509,9 +576,11 @@ Use a deployed frontend for a QR demonstration across devices. Avoid creating ex
 
 ## 10. Exact next step
 
-Resume on 11 November in this order:
+Resume in this order:
 
-1. **Review and commit** the uncommitted 10 November work listed under Priority 0. Ask the user before committing; a commit was declined once this session.
-2. **Manually test the replacement flow** with No. 1: prepare the replacement, have the student approve it, issue it on Amoy, then verify it.
-3. **Decide on auto-issuance on approval**, using the proposed design in section 6. If approved, implement it behind `AUTO_ISSUE` with the background worker, never minting inline in the approval request.
-4. Then continue with Priority 3: the faculty dashboard's real issued/revoked data and the **Share credential** decision.
+1. **Commit** the student-accounts work (12 November), then try it in a real browser: register a student in the Students tab, upload an attendance CSV with one unknown email and one typo, use the prompt, confirm, and check the dashboard hero.
+2. **Confirm auto-issuance and the replacement flow on real Amoy** (see Priority 0). Fix anything that fails before moving on.
+3. **Release preparation**, in this order: deploy a fresh contract and update `CONTRACT_ADDRESS` (and the ABI if the interface changed); back up, then run the reset script and migrate Supabase; deploy frontend and backend together; run one full test on the deployed portal; generate shared PDFs from the deployed frontend.
+4. Priority 4 polish as time allows: small screens, keyboard navigation, longer names, the coordinator signature placeholder, the stale README paragraphs and the bundle-size warnings.
+
+Rough progress estimate (11 November, judgment, not measured): smart contract ~95%, backend ~90%, frontend ~80%, release/ops ~15%, overall ~90% feature-complete and ~70% release-ready.

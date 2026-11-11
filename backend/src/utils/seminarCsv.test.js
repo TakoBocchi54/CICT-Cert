@@ -25,14 +25,18 @@ test("registration CSV rejects malformed, empty, oversized or invalid input", ()
   }
 });
 
-test("attendance CSV matches only normalized Google emails and ignores other student details", () => {
+test("attendance CSV matches only normalized Google emails; name and program are kept as hints only", () => {
   const csv = '\uFEFFfull_name,section,program,student_id, GOOGLE_ACCOUNT \r\nWrong Name,CS 3-1,Wrong Program,00123," JUAN+Seminar@ub.edu.ph "\r\nDifferent Name,Other,Other,999,juan+seminar@ub.edu.ph';
-  assert.deepEqual(readAttendanceCsv(csv), { emails: ["juan+seminar@ub.edu.ph"], duplicatesSkipped: 1 });
-  assert.deepEqual(readAttendanceCsv("google_account\nana@gmail.com"), { emails: ["ana@gmail.com"], duplicatesSkipped: 0 });
+  const result = readAttendanceCsv(csv);
+  assert.deepEqual(result.emails, ["juan+seminar@ub.edu.ph"]);
+  assert.equal(result.duplicatesSkipped, 1);
+  assert.deepEqual(result.hints.get("juan+seminar@ub.edu.ph"), { fullName: "Wrong Name", program: "Wrong Program" });
+  const bare = readAttendanceCsv("google_account\nana@gmail.com");
+  assert.deepEqual([bare.emails, bare.duplicatesSkipped, bare.hints.get("ana@gmail.com")], [["ana@gmail.com"], 0, { fullName: "", program: "" }]);
 });
 
 test("attendance CSV rejects empty lists, missing or repeated email headers and invalid emails", () => {
-  for (const csv of ["google_account", "full_name,student_id\nJuan,123", "google_account,google_account\na@gmail.com,b@gmail.com", "google_account\nnot-an-email", 'google_account\n" "', "x".repeat(MAX_CSV_BYTES + 1)]) {
+  for (const csv of ["google_account", "full_name,student_id\nJuan,123", "google_account,google_account\na@gmail.com,b@gmail.com", "full_name,full_name,google_account\nA,B,a@gmail.com", "google_account\nnot-an-email", 'google_account\n" "', "x".repeat(MAX_CSV_BYTES + 1)]) {
     assert.throws(() => readAttendanceCsv(csv), CsvError);
   }
 });

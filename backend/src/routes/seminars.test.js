@@ -13,7 +13,7 @@ process.env.SESSION_SECRET = "seminar-route-test-secret-only";
 const { default: router } = await import("./seminars.js");
 const { pool } = await import("../db/pool.js");
 
-test("seminar and registration HTTP endpoints with PostgreSQL", { skip: !local && "Requires local PostgreSQL; never runs against production" }, async t => {
+test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && "Requires local PostgreSQL; never runs against production" }, async t => {
   const schema = "cict_seminar_test_" + randomUUID().replaceAll("-", "");
   const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await admin.connect();
@@ -64,11 +64,15 @@ test("seminar and registration HTTP endpoints with PostgreSQL", { skip: !local &
       body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, data: await response.json(), headers: response.headers };
   }
-  const csv = 'full_name,section,program,google_account\nCSV Name,CS 3-1,BSIT,EXISTING@gmail.com\n"Reyes, Ana",IT 2-1,BSIT,ana@gmail.com\n"Reyes, Ana",IT 2-2,BSIT,ANA@GMAIL.COM';
+  // Student accounts exist independently of seminars (registered in the Students tab).
+  await db.query(`
+    INSERT INTO users ("email", "role") VALUES ('ana@gmail.com', 'STUDENT'), ('one@gmail.com', 'STUDENT'), ('juan.delacruz@gmail.com', 'STUDENT'), ('incomplete@gmail.com', 'STUDENT');
+    INSERT INTO student ("userID", "fullName", "program") VALUES (4, 'Reyes, Ana', 'BSIT'), (5, 'One', 'BSCS'), (6, 'Juan  Dela Cruz', 'BSCS');`);
   let seminarID;
   await t.test("rejects anonymous, student, and deleted faculty sessions", async () => {
+    const csv = "google_account\nana@gmail.com";
     for (const session of ["", await cookie("STUDENT", "3", "1"), await cookie("FACULTY", "999", "999")]) {
-      for (const [method, suffix, body] of [["GET", ""], ["POST", "", {}], ["GET", "/1/registrations"], ["POST", "/1/registrations/import", { csv }],
+      for (const [method, suffix, body] of [["GET", ""], ["POST", "", {}], ["GET", "/1/registrations"],
         ["POST", "/1/attendance/preview", { csv }], ["POST", "/1/attendance/import", { csv, previewHash: "a".repeat(64) }]]) {
         assert.equal((await request(method, suffix, body, session)).status, 401);
       }
@@ -91,168 +95,122 @@ test("seminar and registration HTTP endpoints with PostgreSQL", { skip: !local &
     assert.equal(list.headers.get("cache-control"), "no-store");
     assert.equal(list.data[0].registrationCount, 0);
   });
-  await t.test("bad CSV and invalid seminar IDs create no accounts", async () => {
-    const before = (await db.query("SELECT count(*) FROM users")).rows;
-    for (const bad of ["", "full_name,program\nJuan,BSCS", "full_name,program,google_account\nJuan,BSCS,bad-email"]) {
-      assert.equal((await request("POST", "/" + seminarID + "/registrations/import", { csv: bad })).status, 400);
-    }
+  await t.test("invalid or unknown seminar IDs are rejected", async () => {
     for (const id of ["0", "abc", "9223372036854775808"]) {
       assert.equal((await request("GET", "/" + id + "/registrations")).status, 400);
     }
     assert.equal((await request("GET", "/999999/registrations")).status, 404);
-    assert.equal((await request("POST", "/999999/registrations/import", { csv })).status, 404);
-    assert.deepEqual((await db.query("SELECT count(*) FROM users")).rows, before);
-  });
-  await t.test("imports new students, preserves existing profiles and wallets, and skips duplicate emails", async () => {
-    const result = await request("POST", "/" + seminarID + "/registrations/import", { csv });
-    assert.equal(result.status, 200);
-    assert.deepEqual(result.data, { imported: 2, alreadyRegistered: 0, newStudents: 1, duplicatesSkipped: 1 });
-    const registrations = await request("GET", "/" + seminarID + "/registrations");
-    assert.equal(registrations.data.length, 2);
-    const existing = registrations.data.find(row => row.email === "existing@gmail.com");
-    assert.equal(existing.fullName, "Existing Student");
-    assert.equal(existing.program, "BSCS");
-    assert.equal(existing.walletConnected, true);
-    assert.ok(registrations.data.every(row => row.attended === false));
-    const added = registrations.data.find(row => row.email === "ana@gmail.com");
-    assert.equal(added.walletConnected, false);
-    const account = (await db.query(`SELECT "role", "passwordHash" FROM users WHERE email = 'ana@gmail.com'`)).rows[0];
-    assert.deepEqual(account, { role: "STUDENT", passwordHash: null });
-    const list = await request();
-    assert.equal(list.data[0].registrationCount, 2);
-    assert.equal(list.data[0].walletCount, 1);
-  });
-  await t.test("reimports are idempotent and accounts are reused across seminars", async () => {
-    await db.query(`UPDATE seminar_registration SET attended = true WHERE "seminarID" = $1 AND "studentID" = 1`, [seminarID]);
-    const repeat = await request("POST", "/" + seminarID + "/registrations/import", { csv });
-    assert.deepEqual(repeat.data, { imported: 0, alreadyRegistered: 2, newStudents: 0, duplicatesSkipped: 1 });
-    assert.equal((await db.query(`SELECT attended FROM seminar_registration WHERE "seminarID" = $1 AND "studentID" = 1`, [seminarID])).rows[0].attended, true);
-    const second = await request("POST", "", { seminarTitle: "Second seminar", seminarDate: "2026-11-09" });
-    const result = await request("POST", "/" + second.data.seminarID + "/registrations/import", { csv });
-    assert.equal(result.data.imported, 2);
-    assert.equal(result.data.newStudents, 0);
-  });
-  await t.test("concurrent imports do not duplicate accounts or seminar registrations", async () => {
-    const concurrentCSV = "full_name,program,google_account\nOne,BSCS,one@gmail.com\nTwo,BSCS,two@gmail.com";
-    const results = await Promise.all([request("POST", "/" + seminarID + "/registrations/import", { csv: concurrentCSV }), request("POST", "/" + seminarID + "/registrations/import", { csv: concurrentCSV })]);
-    assert.ok(results.every(result => result.status === 200));
-    assert.deepEqual(results.map(result => result.data.imported).sort(), [0, 2]);
-    assert.deepEqual(results.map(result => result.data.newStudents).sort(), [0, 2]);
-  });
-  await t.test("faculty email conflicts roll back the entire import, including newly created accounts", async () => {
-    const before = (await db.query("SELECT count(*) FROM users")).rows;
-    const conflict = "full_name,program,google_account\nNew Student,BSCS,rollback@gmail.com\nFaculty,BSCS,faculty@example.test";
-    const result = await request("POST", "/" + seminarID + "/registrations/import", { csv: conflict });
-    assert.equal(result.status, 409);
-    assert.deepEqual((await db.query("SELECT count(*) FROM users")).rows, before);
-  });
-  await t.test("incomplete existing student accounts require review without creating partial registrations", async () => {
-    await db.query(`INSERT INTO users (email, role) VALUES ('incomplete@gmail.com', 'STUDENT')`);
-    const before = (await db.query("SELECT count(*) FROM users")).rows;
-    const result = await request("POST", "/" + seminarID + "/registrations/import", {
-      csv: "full_name,program,google_account\nNew,BSCS,another@gmail.com\nIncomplete,BSCS,incomplete@gmail.com",
-    });
-    assert.equal(result.status, 409);
-    assert.deepEqual((await db.query("SELECT count(*) FROM users")).rows, before);
-  });
-  await t.test("database failures roll back account creation without exposing SQL errors", async subtest => {
-    subtest.mock.method(console, "error", () => {});
-    const before = (await db.query("SELECT count(*) FROM users")).rows;
-    await db.query(`ALTER TABLE student ADD CONSTRAINT test_import_failure CHECK ("fullName" <> 'Reject import')`);
-    try {
-      const result = await request("POST", "/" + seminarID + "/registrations/import", { csv: "full_name,program,google_account\nReject import,BSCS,reject@gmail.com" });
-      assert.equal(result.status, 500);
-      assert.match(result.data.error, /Please try again/);
-      assert.doesNotMatch(result.data.error, /test_import_failure|INSERT|constraint/);
-      assert.deepEqual((await db.query("SELECT count(*) FROM users")).rows, before);
-    } finally { await db.query("ALTER TABLE student DROP CONSTRAINT test_import_failure"); }
-  });
-  await t.test("imports more than 100 participants without a participant cap", async () => {
-    const csv = "full_name,program,google_account\n" + Array.from({ length: 101 }, (_, index) => `Student ${index},BSCS,bulk${index}@gmail.com`).join("\n");
-    const result = await request("POST", "/" + seminarID + "/registrations/import", { csv });
-    assert.equal(result.status, 200);
-    assert.equal(result.data.imported, 101);
-    assert.equal(result.data.newStudents, 101);
+    assert.equal((await request("GET", "/" + seminarID + "/registrations")).data.length, 0);
   });
 
   const attendanceSeminar = await request("POST", "", { seminarTitle: "Attendance test", seminarDate: "2026-11-15" });
   const attendanceID = attendanceSeminar.data.seminarID;
-  await request("POST", "/" + attendanceID + "/registrations/import", { csv });
   const attendanceCSV = 'full_name,section,program,student_id,google_account\nWrong Name,Other,Other,999,EXISTING@gmail.com\nAnother,Other,Other,888,ana@gmail.com\nDuplicate,Other,Other,777,ANA@gmail.com';
-  const previewAttendance = csv => request("POST", "/" + attendanceID + "/attendance/preview", { csv });
-  const saveAttendance = (csv, previewHash) => request("POST", "/" + attendanceID + "/attendance/import", { csv, previewHash });
+  const previewAttendance = (csv, aliases) => request("POST", "/" + attendanceID + "/attendance/preview", { csv, aliases });
+  const saveAttendance = (csv, previewHash, aliases) => request("POST", "/" + attendanceID + "/attendance/import", { csv, previewHash, aliases });
   const savedAttendance = async () => (await db.query(`SELECT "studentID", "attended" FROM seminar_registration WHERE "seminarID" = $1 ORDER BY "studentID"`, [attendanceID])).rows;
+  const userCount = async () => (await db.query("SELECT count(*) FROM users")).rows[0].count;
 
-  await t.test("attendance preview matches Google emails without changing profiles, accounts, or attendance", async () => {
-    const before = await savedAttendance();
+  await t.test("attendance preview matches any student account without changing profiles, accounts, or attendance", async () => {
     const preview = await previewAttendance(attendanceCSV);
     assert.equal(preview.status, 200);
     assert.equal(preview.data.matched.length, 2);
     assert.equal(preview.data.matched.find(row => row.email === "existing@gmail.com").fullName, "Existing Student");
-    assert.deepEqual(preview.data.unmatched, []);
+    assert.deepEqual(preview.data.unregistered, []);
+    assert.deepEqual(preview.data.facultyEmails, []);
     assert.equal(preview.data.duplicatesSkipped, 1);
     assert.equal(preview.data.awaitingWallet, 1);
     assert.equal(preview.data.newlyAttended, 2);
     assert.equal(preview.data.canSave, true);
-    assert.deepEqual(await savedAttendance(), before);
+    assert.deepEqual(await savedAttendance(), [], "preview creates no seminar rows");
     assert.match(preview.data.previewHash, /^[0-9a-f]{64}$/);
   });
-  await t.test("attendance requires a reviewed file and rejects empty or malformed lists", async () => {
+  await t.test("attendance requires a reviewed file and rejects empty or malformed lists and aliases", async () => {
     assert.equal((await saveAttendance(attendanceCSV)).status, 400);
     assert.equal((await saveAttendance(attendanceCSV, {})).status, 400);
     for (const csv of ["google_account", "student_id\n1234", "google_account\nnot-an-email"]) {
       assert.equal((await previewAttendance(csv)).status, 400);
     }
+    for (const aliases of [["ana@gmail.com"], "x", { "notlisted@gmail.com": "ana@gmail.com" }, { "ana@gmail.com": "not-an-email" }]) {
+      assert.equal((await previewAttendance(attendanceCSV, aliases)).status, 400, JSON.stringify(aliases));
+    }
     assert.equal((await request("POST", "/999999/attendance/preview", { csv: attendanceCSV })).status, 404);
     assert.equal((await request("POST", "/0/attendance/preview", { csv: attendanceCSV })).status, 400);
   });
-  await t.test("confirmed attendance includes registered students without wallets and leaves other seminars unchanged", async () => {
+  await t.test("confirming creates attended rows for accounts never linked to the seminar and leaves other seminars unchanged", async () => {
+    await db.query(`INSERT INTO seminar_registration ("seminarID", "studentID", "attended") VALUES ($1, 1, true), ($1, 2, false)`, [seminarID]);
     const otherSeminars = (await db.query(`SELECT "seminarID", "studentID", "attended" FROM seminar_registration WHERE "seminarID" <> $1 ORDER BY "seminarID", "studentID"`, [attendanceID])).rows;
     const preview = await previewAttendance(attendanceCSV);
     const result = await saveAttendance(attendanceCSV, preview.data.previewHash);
     assert.equal(result.status, 200);
     assert.deepEqual(result.data, { attended: 2, markedAttended: 2, markedAbsent: 0, awaitingWallet: 1, duplicatesSkipped: 1 });
-    assert.ok((await savedAttendance()).every(row => row.attended));
+    assert.deepEqual(await savedAttendance(), [{ studentID: "1", attended: true }, { studentID: "2", attended: true }]);
     assert.deepEqual((await db.query(`SELECT "seminarID", "studentID", "attended" FROM seminar_registration WHERE "seminarID" <> $1 ORDER BY "seminarID", "studentID"`, [attendanceID])).rows, otherSeminars);
     const list = await request();
     assert.equal(list.data.find(row => row.seminarID === attendanceID).attendanceCount, 2);
+    assert.equal((await request("GET", "/" + attendanceID + "/registrations")).data.length, 2);
   });
-  await t.test("unmatched emails block the entire save and never create accounts or registrations", async () => {
-    const before = await savedAttendance();
-    const accounts = (await db.query("SELECT count(*) FROM users")).rows;
-    // one@gmail.com exists in the system, but is registered only for another seminar.
-    const csv = "google_account\nexisting@gmail.com\nmissing@gmail.com\none@gmail.com";
+  await t.test("unregistered and faculty emails are split out, with hints and suggestions, and block the save", async () => {
+    const before = await savedAttendance(), accounts = await userCount();
+    const csv = "full_name,program,google_account\nNew Person,BSIT,new@gmail.com\nX,Y,juan.delacruz@gmial.com\n juan dela  CRUZ ,BSCS,jdc@yahoo.com\nZ,Y,faculty@example.test\nI,Y,incomplete@gmail.com\nE,Y,existing@gmail.com";
     const preview = await previewAttendance(csv);
-    assert.deepEqual(preview.data.unmatched, ["missing@gmail.com", "one@gmail.com"]);
+    assert.equal(preview.status, 200);
+    assert.deepEqual(preview.data.facultyEmails, ["faculty@example.test"]);
+    const byEmail = Object.fromEntries(preview.data.unregistered.map(row => [row.email, row]));
+    assert.deepEqual(Object.keys(byEmail).sort(), ["incomplete@gmail.com", "jdc@yahoo.com", "juan.delacruz@gmial.com", "new@gmail.com"]);
+    assert.deepEqual([byEmail["new@gmail.com"].fullName, byEmail["new@gmail.com"].program, byEmail["new@gmail.com"].suggestions], ["New Person", "BSIT", []]);
+    assert.deepEqual(byEmail["juan.delacruz@gmial.com"].suggestions.map(row => row.email), ["juan.delacruz@gmail.com"], "domain typo");
+    assert.deepEqual(byEmail["jdc@yahoo.com"].suggestions.map(row => row.email), ["juan.delacruz@gmail.com"], "same name");
+    assert.equal(preview.data.unregistered.length + preview.data.facultyEmails.length, 5);
     assert.equal(preview.data.canSave, false);
     const result = await saveAttendance(csv, preview.data.previewHash);
     assert.equal(result.status, 409);
     assert.deepEqual(await savedAttendance(), before);
-    assert.deepEqual((await db.query("SELECT count(*) FROM users")).rows, accounts);
+    assert.equal(await userCount(), accounts);
+  });
+  await t.test("aliases map a listed email to an existing account and are validated on every request", async () => {
+    const csv = "google_account\nexisting@gmail.com\nana@gmail.com\njuan.delacruz@gmial.com";
+    const aliases = { "JUAN.DELACRUZ@gmial.com": "juan.delacruz@gmail.com" };
+    const preview = await previewAttendance(csv, aliases);
+    assert.equal(preview.data.canSave, true);
+    const juan = preview.data.matched.find(row => row.email === "juan.delacruz@gmail.com");
+    assert.equal(juan.listedAs, "juan.delacruz@gmial.com");
+    assert.equal((await saveAttendance(csv, preview.data.previewHash)).status, 409, "the hash covers aliases");
+    assert.equal((await saveAttendance(csv, preview.data.previewHash, aliases)).status, 200);
+    assert.equal((await savedAttendance()).filter(row => row.attended).length, 3);
+    assert.equal((await previewAttendance(csv, { "juan.delacruz@gmial.com": "faculty@example.test" })).status, 409, "alias to a non-student");
+    assert.equal((await previewAttendance(csv, { "ana@gmail.com": "one@gmail.com" })).status, 409, "listed email already has an account");
+  });
+  await t.test("registering a listed student after the review makes the old review stale", async () => {
+    const csv = "full_name,program,google_account\nLate,BSIT,late@gmail.com\nE,Y,existing@gmail.com";
+    const preview = await previewAttendance(csv);
+    assert.equal(preview.data.canSave, false);
+    await db.query(`WITH u AS (INSERT INTO users (email, role) VALUES ('late@gmail.com', 'STUDENT') RETURNING "userID")
+      INSERT INTO student ("userID", "fullName", "program") SELECT "userID", 'Late', 'BSIT' FROM u`);
+    const stale = await saveAttendance(csv, preview.data.previewHash);
+    assert.equal(stale.status, 409);
+    assert.match(stale.data.error, /changed since your review/);
+    const fresh = await previewAttendance(csv);
+    assert.equal(fresh.data.canSave, true);
   });
   await t.test("a corrected final list clears omitted attendance, and repeated review/save is idempotent", async () => {
     const csv = "google_account\nexisting@gmail.com";
     const preview = await previewAttendance(csv);
-    assert.equal(preview.data.removed.length, 1);
-    assert.equal(preview.data.removed[0].email, "ana@gmail.com");
+    assert.deepEqual(preview.data.removed.map(row => row.email).sort(), ["ana@gmail.com", "juan.delacruz@gmail.com"]);
     const result = await saveAttendance(csv, preview.data.previewHash);
     assert.equal(result.status, 200);
     assert.equal(result.data.attended, 1);
-    assert.equal(result.data.markedAbsent, 1);
+    assert.equal(result.data.markedAbsent, 2);
     const repeat = await previewAttendance(csv);
     const saved = await saveAttendance(csv, repeat.data.previewHash);
     assert.equal(saved.data.markedAttended, 0);
     assert.equal(saved.data.markedAbsent, 0);
   });
-  await t.test("a changed CSV or intervening registration makes the old review stale", async () => {
-    const csv = "google_account\nexisting@gmail.com";
-    const preview = await previewAttendance(csv);
+  await t.test("a changed CSV makes the old review stale", async () => {
+    const preview = await previewAttendance("google_account\nexisting@gmail.com");
     const before = await savedAttendance();
     assert.equal((await saveAttendance("google_account\nana@gmail.com", preview.data.previewHash)).status, 409);
     assert.deepEqual(await savedAttendance(), before);
-    await request("POST", "/" + attendanceID + "/registrations/import", { csv: "full_name,program,google_account\nOne,BSCS,one@gmail.com" });
-    assert.equal((await saveAttendance(csv, preview.data.previewHash)).status, 409);
-    assert.equal((await savedAttendance()).filter(row => row.attended).length, 1);
   });
   await t.test("concurrent confirmations of different lists cannot silently overwrite each other", async () => {
     const first = "google_account\nana@gmail.com";
@@ -269,7 +227,9 @@ test("seminar and registration HTTP endpoints with PostgreSQL", { skip: !local &
     await db.query(`ALTER TABLE seminar_registration ADD CONSTRAINT test_attendance_failure CHECK (NOT ("seminarID" = ${attendanceID} AND "studentID" = 1 AND "attended"))`);
     try {
       const preview = await previewAttendance(csv);
-      assert.equal((await saveAttendance(csv, preview.data.previewHash)).status, 500);
+      const result = await saveAttendance(csv, preview.data.previewHash);
+      assert.equal(result.status, 500);
+      assert.doesNotMatch(result.data.error, /test_attendance_failure|constraint/);
       assert.deepEqual(await savedAttendance(), before);
     } finally { await db.query("ALTER TABLE seminar_registration DROP CONSTRAINT test_attendance_failure"); }
   });

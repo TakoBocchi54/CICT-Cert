@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Seal, Pill, Btn } from '../components/design-system';
+import { Seal, Pill, Btn, Rosette } from '../components/design-system';
 import { api } from '../lib/api';
 
 const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
@@ -24,6 +24,22 @@ export default function FacultyDashboardPage({
   const revoked = summary.data?.recentRevoked || [];
   const totalIssued = summary.data?.issuedCount ?? 0;
   const totalRevoked = summary.data?.revokedCount ?? 0;
+  // Newest seminar date first; ties go to the most recently created.
+  const byLatest = [...(seminars.data || [])].sort((x, y) => y.seminarDate.localeCompare(x.seminarDate) || Number(y.seminarID) - Number(x.seminarID));
+  const latest = byLatest[0];
+  const plural = (n, one, many) => n === 1 ? one : many;
+  // What the latest seminar needs next, in workflow order.
+  const hero = !latest ? null
+    : latest.readyCount ? { count: latest.readyCount, badge: 'Ready to issue', icon: 'ph-check-circle', action: 'Begin issuance',
+      label: plural(latest.readyCount, 'Certificate approved by its student', 'Certificates approved by students') }
+    : latest.awaitingCount ? { count: latest.awaitingCount, badge: 'Awaiting student approval', icon: 'ph-hourglass-medium', action: 'Open seminar',
+      label: plural(latest.awaitingCount, 'Certificate waiting for its student', 'Certificates waiting for students') }
+    : !latest.attendanceCount ? { count: null, badge: 'Attendance not imported', icon: 'ph-users', action: 'Import attendance',
+      label: 'Upload the final attendee list' }
+    : latest.issuedCount < latest.attendanceCount ? { count: latest.attendanceCount - latest.issuedCount, badge: 'Certificates to prepare', icon: 'ph-stamp', action: 'Open seminar',
+      label: plural(latest.attendanceCount - latest.issuedCount, 'Attendee without a certificate yet', 'Attendees without a certificate yet') }
+    : { count: latest.issuedCount, badge: 'All issued', icon: 'ph-seal-check', action: 'Open seminar',
+      label: plural(latest.issuedCount, 'Certificate issued', 'Certificates issued') };
 
   return (
     <div>
@@ -36,12 +52,9 @@ export default function FacultyDashboardPage({
           <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>
             Seminar workspace
           </h1>
-          <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
-            Your seminar management dashboard.
-          </p>
         </div>
         <Btn 
-          onClick={onIssueClick} 
+          onClick={() => onIssueClick()} 
           icon="ph-stamp" 
           iconRight="ph-arrow-right" 
           className="!py-3.5 !px-7 !text-base rise" 
@@ -52,49 +65,52 @@ export default function FacultyDashboardPage({
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6">
-        {/* Seminar registrations */}
-        <section className="lg:col-span-8 sheet p-9 rise">
-          <h2 className="font-serif text-3xl font-medium">Seminar registrations</h2>
-          {seminars.isPending ? <p role="status" className="mt-5 text-ink-soft">Loading seminars...</p> : seminars.error ? (
-            <div role="alert" className="mt-5 space-y-3">
-              <p className="text-sm text-revoked">{seminars.error.message}</p>
-              <Btn variant="line" onClick={() => seminars.refetch()}>Try again</Btn>
-            </div>
-          ) : seminars.data.length ? (
-            <div className="mt-5 space-y-4">
-              {seminars.data.slice(0, 4).map(seminar => (
-                <div key={seminar.seminarID} className="rounded-xl border border-[var(--line)] p-4">
-                  <h3 className="break-words font-medium">{seminar.seminarTitle}</h3>
-                  <p className="mt-1 text-sm text-ink-muted">{fmt(seminar.seminarDate)}</p>
-                  <p className="mt-3 text-sm text-ink-soft">{seminar.registrationCount} registered · {seminar.attendanceCount} attended · {seminar.walletCount} wallets connected</p>
+        {seminars.data?.length > 0 && <>
+          {/* Hero: what needs attention next */}
+          <section className="lg:col-span-7 sheet-dark p-7 rise">
+            <Rosette color="#fff" className="absolute" style={{ width: 380, right: -120, top: -150, opacity: .1 }} />
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full" style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)' }}>
+                <i className={'ph-fill ' + hero.icon + ' text-[#7fd6a6]'}></i>{hero.badge}
+              </div>
+              <h2 className="font-serif text-3xl font-medium leading-tight mt-4 break-words">{latest.seminarTitle}</h2>
+              <p className="text-white/60 mt-1 text-sm">Held {fmt(latest.seminarDate)} · {latest.attendanceCount} attendees recorded</p>
+              <div className="flex flex-wrap items-end justify-between gap-6 mt-5">
+                <div>
+                  {hero.count !== null && <div className="font-serif font-medium leading-none" style={{ fontSize: 136, letterSpacing: '-.04em' }}>{hero.count}</div>}
+                  <div className="eyebrow !text-[#7fd6a6] mt-2">{hero.label}</div>
                 </div>
-              ))}
-              <Btn variant="line" onClick={onIssueClick}>Manage registrations</Btn>
+                <button type="button" onClick={() => onIssueClick(latest.seminarID)} className="bg-white text-forest font-semibold text-sm px-5 py-2.5 rounded-xl hover:-translate-y-0.5 transition-transform inline-flex items-center gap-2">
+                  {hero.action} <i className="ph-bold ph-arrow-right"></i>
+                </button>
+              </div>
             </div>
-          ) : <div className="text-center py-12">
-            <div className="flex justify-center mb-6">
-              <Seal status="Pending" size={92} />
-            </div>
-            <h3 className="font-serif text-3xl font-medium">No seminars yet</h3>
-            <p className="text-ink-soft mt-3 max-w-md mx-auto">
-              Create a seminar and import the registration CSV before the event.
-            </p>
-            <Btn className="mt-6" icon="ph-stamp" onClick={onIssueClick}>
-              Create your first seminar
-            </Btn>
-          </div>}
-        </section>
+          </section>
 
-        {/* Registration guidance */}
-        <section className="lg:col-span-4 sheet p-7 rise" style={{ '--d': '.08s' }}>
-          <div className="eyebrow mb-5">Before the seminar</div>
-          <ol className="list-decimal space-y-4 pl-5 text-sm leading-relaxed text-ink-soft">
-            <li>Create the seminar with its title and date.</li>
-            <li>Import student registrations using their Google account emails.</li>
-            <li>Ask students to sign in and connect their wallets.</li>
-          </ol>
-          <p className="hair mt-6 pt-5 text-sm text-ink-muted">The final attendance list determines recipients after the seminar.</p>
-        </section>
+          {/* Issuance progress: issued out of attended, newest seminars first */}
+          <section className="lg:col-span-5 sheet p-7 rise" style={{ '--d': '.08s' }}>
+            <div className="eyebrow mb-5">Issuance progress</div>
+            {byLatest.slice(0, 3).map(seminar => {
+              const percent = seminar.attendanceCount ? Math.min(100, Math.round(seminar.issuedCount / seminar.attendanceCount * 100)) : 0;
+              return (
+                <div key={seminar.seminarID} className="mb-6 last:mb-0">
+                  <div className="flex justify-between items-baseline gap-3">
+                    <div className="font-serif text-lg font-medium leading-tight truncate" title={seminar.seminarTitle}>{seminar.seminarTitle}</div>
+                    <div className="font-serif text-2xl shrink-0">{percent}<span className="text-sm text-ink-muted">%</span></div>
+                  </div>
+                  <div className="h-1.5 bg-paper-2 rounded-full mt-3 overflow-hidden" role="progressbar" aria-label={seminar.seminarTitle + ' issuance'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+                    <div className="h-full rounded-full fillbar" style={{ width: percent + '%', background: percent === 100 ? 'var(--verified)' : 'var(--pending)' }}></div>
+                  </div>
+                  <div className="text-xs text-ink-muted mt-2">
+                    {seminar.attendanceCount
+                      ? `${seminar.issuedCount} of ${seminar.attendanceCount} issued · ${seminar.readyCount} ready · ${seminar.awaitingCount} awaiting approval`
+                      : 'Attendance not imported yet'}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        </>}
 
         {/* Recently issued */}
         <section className="lg:col-span-7 sheet p-7 rise" style={{ '--d': '.12s' }}>

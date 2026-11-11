@@ -12,6 +12,7 @@ import facultyAccountRoutes from "./routes/facultyAccount.js";
 import seminarRoutes from "./routes/seminars.js";
 import certificateApprovalRoutes from "./routes/certificateApprovals.js";
 import revocationRoutes from "./routes/revocations.js";
+import studentRoutes from "./routes/students.js";
 
 const app = express();
 
@@ -30,5 +31,6 @@ app.use("/api", facultyAccountRoutes);
 app.use("/api", seminarRoutes);
 app.use("/api", certificateApprovalRoutes);
 app.use("/api", revocationRoutes);
+app.use("/api", studentRoutes);
 
 export default app;
