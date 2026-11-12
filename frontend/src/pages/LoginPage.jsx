@@ -22,6 +22,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasLoggedIn, setHasLoggedIn] = useState(false);
@@ -227,10 +228,12 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
             {role === 'faculty' ? (
               <>
                 <div>
-                  <label className="eyebrow block mb-2">Institutional email</label>
+                  <label htmlFor="faculty-email" className="eyebrow block mb-2">Institutional email</label>
                   <input
+                    id="faculty-email"
                     required
                     type="email"
+                    autoComplete="username"
                     className="field"
                     placeholder={role + '@ub.edu.ph'}
                     value={email}
@@ -239,15 +242,30 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
                 </div>
                 
                 <div>
-                  <label className="eyebrow block mb-2">Password</label>
-                  <input
-                    required
-                    type="password"
-                    className="field"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
+                  <label htmlFor="faculty-password" className="eyebrow block mb-2">Password</label>
+                  <div className="relative">
+                    <input
+                      id="faculty-password"
+                      required
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      className="field !pr-14"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(shown => !shown)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      aria-controls="faculty-password"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-ink-muted hover:bg-black/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest"
+                    >
+                      <i className={'ph-bold text-lg ' + (showPassword ? 'ph-eye-slash' : 'ph-eye')} aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </div>
 
                 {error && (

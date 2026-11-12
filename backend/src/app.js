@@ -13,6 +13,7 @@ import seminarRoutes from "./routes/seminars.js";
 import certificateApprovalRoutes from "./routes/certificateApprovals.js";
 import revocationRoutes from "./routes/revocations.js";
 import studentRoutes from "./routes/students.js";
+import templateRoutes from "./routes/templates.js";
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.use("/api", seminarRoutes);
 app.use("/api", certificateApprovalRoutes);
 app.use("/api", revocationRoutes);
 app.use("/api", studentRoutes);
+app.use("/api", templateRoutes);
 
 export default app;

@@ -248,6 +248,7 @@ export default function VerifierPortalPage({
                       iso: details.seminarDate,
                       status: banner.seal,
                       hash: submittedHash,
+                      template: details.template,
                     }}
                   />
                   <p className="text-sm text-ink-soft">

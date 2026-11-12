@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
+import { certificateProgress } from '../lib/certificateProgress';
 
 // mode 'approvals': prepare certificates and track student approvals. mode 'issue': mint approved certificates.
 export default function CertificatePreparation({ seminarID, disabled, mode }) {
@@ -98,7 +99,7 @@ export default function CertificatePreparation({ seminarID, disabled, mode }) {
           <td className="p-3 font-mono">{certificate.certificateNo}</td>
           <td className="p-3">{certificate.recipientName}<span className="block break-all text-xs text-ink-soft">{certificate.email}</span></td>
           <td className="p-3">
-            {['ISSUED', 'REVOKED'].includes(certificate.status) ? certificate.status : certificate.transactionStatus === 'PENDING' ? 'Transaction pending' : !certificate.attended ? 'On hold: attendance not confirmed' : !certificate.walletConnected ? 'Awaiting wallet setup' : certificate.status === 'FAILED' ? 'Mint failed; ready to retry' : certificate.consentedAt ? 'Approved; awaiting issuance' : 'Awaiting student approval'}
+            {certificateProgress(certificate)}
             {certificate.tokenID && <span className="mt-1 block text-xs">Token #{certificate.tokenID}</span>}
             {certificate.transactionHash && <a className="mt-1 block text-xs text-forest underline" href={`https://amoy.polygonscan.com/tx/${certificate.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>}
             {certificate.transactionStatus === 'PENDING' && <Btn variant="line" size="sm" className="mt-2" disabled={busy || !faculty.data?.canIssue} onClick={() => check.mutate(certificate.certificateID)}>Check transaction</Btn>}

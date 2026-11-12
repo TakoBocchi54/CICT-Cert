@@ -59,7 +59,9 @@ Faculty-only endpoints (session cookie of an active faculty account required):
 | POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "..." }] }` |
 | DELETE | `/api/faculty/students/:studentID` | — (`canIssue` only) |
 | GET | `/api/faculty/seminars` | — |
-| POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08" }` |
+| POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08", "templateID": "3" }` (`templateID` optional; `null` = built-in design) |
+| PATCH | `/api/faculty/seminars/:seminarID` | same body as POST; fixes a mistaken title/date/design (omit `templateID` to keep it). 409 once any certificate exists for the seminar |
+| DELETE | `/api/faculty/seminars/:seminarID` | — (`canIssue` only); deletes the seminar and its attendance rows, never student accounts. 409 once any certificate exists |
 | GET | `/api/faculty/seminars/:seminarID/registrations` | — (the seminar's attendance rows) |
 | POST | `/api/faculty/seminars/:seminarID/attendance/preview` | `{ "csv": "google_account\n...", "aliases": { "<listed email>": "<existing student email>" } }` |
 | POST | `/api/faculty/seminars/:seminarID/attendance/import` | `{ "csv": "...", "aliases": { ... }, "previewHash": "<returned by preview>" }` |
@@ -161,6 +163,30 @@ Revocation uses the same safeguards as issuance: the seminar row lock, the share
 Issued certificates are never edited. To correct one, revoke it, then select **Prepare replacement** on its card. Faculty enter the corrected recipient name, seminar title and seminar date (prefilled from the revoked certificate). These corrections are saved only on the new certificate; the student profile and seminar records are unchanged. The replacement is a new `PENDING` certificate with a new certificate number for the same registration, using the student's currently linked wallet. Preparing it sends no transaction.
 
 A replacement requires the original to be `REVOKED`, the registration to still be marked attended, and no other non-revoked certificate for that registration (only one replacement at a time). The student then approves the replacement's exact facts in the portal, and faculty issue it through the normal seminar issuance flow. The revoked original and its transaction history remain; the lookup shows the replacement's number and status, without a stored replacement link.
+
+## Certificate templates
+
+Apply `sql/migrations/006_certificate_templates.sql` to existing databases (fresh `schema.sql` includes it; the general migration script also applies it). It adds `certificate_template`, `certificate_template_signature` and the nullable `seminar."templateID"` (`ON DELETE SET NULL`, so deleting a template moves its seminars back to the built-in design). Nothing existing changes.
+
+A template is an uploaded background plus placed fields (`fields` JSONB: recipient name, seminar title, seminar date, certificate number, QR code and up to 3 signature images with optional printed name/title). It only changes how a certificate is drawn: the canonical certificate hash, the consent message and the contract are unchanged.
+
+- **Images:** PNG or JPEG only, recognised from the file header (`src/utils/certificateTemplate.js`), never SVG. Backgrounds: up to 5 MB, at least 1000 px on the long side, and A4 or US Letter proportions (landscape or portrait, ±2%); the paper size is derived from the pixel size and sets the PDF page. Signatures: up to 1 MB, any proportions, at most 3 per template. Uploads are raw request bodies (`Content-Type: image/png|image/jpeg`).
+- **Sharing and permissions:** all faculty can list and choose any template; only its creator or a `canIssue` faculty can edit, replace the image, add/remove signatures or delete it.
+- **Locking:** once any certificate exists for a seminar using a template, the template returns 409 on every change. The change takes `FOR SHARE` on those seminars before checking, which serializes with certificate preparation (it locks the seminar row `FOR UPDATE`). A seminar's own design is locked with its title and date.
+- **Public images:** `/verify` is public, so template and signature images are served without a session, with the stored type, `nosniff` and long caching (template URLs carry `?v=<updatedAt>`).
+- Certificate responses (`GET /api/student/certificates`, the consent request, and verified `GET /api/certificates/verify/:certHash` details) include `template`: `null` or `{ templateID, width, height, fields, imageUrl, signatures: [{ signatureID, imageUrl }] }`.
+
+| Method | Endpoint | Body |
+| --- | --- | --- |
+| GET | `/api/faculty/certificate-templates` | — (all templates with `seminarCount`, `locked`, `canEdit`; no image bytes) |
+| POST | `/api/faculty/certificate-templates?name=` | background image; creates the template with default field positions |
+| PATCH | `/api/faculty/certificate-templates/:templateID` | `{ "name": "...", "fields": { "text": {...}, "qr": {...}, "signatures": [...] } }` |
+| PUT | `/api/faculty/certificate-templates/:templateID/image` | replacement background image |
+| DELETE | `/api/faculty/certificate-templates/:templateID` | — |
+| POST | `/api/faculty/certificate-templates/:templateID/signatures` | signature image; returns `{ signatureID, imageUrl }` |
+| DELETE | `/api/faculty/certificate-templates/:templateID/signatures/:signatureID` | — (also removes its placement from `fields`) |
+| GET | `/api/certificate-templates/:templateID/image` | — (public) |
+| GET | `/api/certificate-templates/:templateID/signatures/:signatureID` | — (public) |
 
 ## Checks
 

@@ -7,11 +7,11 @@ import { Btn, Pill } from '../components/design-system';
 const FILTERS = [['', 'All'], ['ISSUED', 'Verified'], ['REVOKED', 'Revoked']];
 const fmtDate = value => new Date(value).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
-// Registry: every certificate that reached the chain. Revoking and replacing stay on the Revocations page.
-export default function RegistryPage({ onOpenRevocation }) {
+// Registry: every certificate that reached the chain. A row's Revoke/Details opens the revocation page for that certificate.
+export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(() => FILTERS.some(([value]) => value === initialStatus) ? initialStatus : '');
 
   useEffect(() => {
     const timer = setTimeout(() => setQ(search.trim()), 250);

@@ -45,7 +45,6 @@ export default function StudentCertificateApprovals({ studentID }) {
       <h2 id="certificate-approvals-title" className="font-serif text-2xl">Certificate approvals</h2>
       <Btn variant="line" size="sm" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh</Btn>
     </div>
-    <p className="mb-4 text-sm text-ink-soft">Review your certificate before approving issuance. Your approval is a wallet signature; it does not spend POL.</p>
     {certificates.isPending ? <p role="status">Loading certificates...</p> : certificates.error ? <p role="alert" className="text-sm text-revoked">{certificates.error.message}</p> : !pendingCertificates.length ? <p className="text-sm text-ink-soft">No certificates awaiting approval yet.</p> : <ul className="space-y-3">
       {pendingCertificates.map(certificate => <li key={certificate.certificateID} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] p-4">
         <div className="min-w-0 flex-1">
@@ -64,7 +63,7 @@ export default function StudentCertificateApprovals({ studentID }) {
     {approve.isSuccess && <p role="status" className="mt-4 text-sm text-verified">Approval saved. Your certificate is pending faculty issuance.</p>}
     {request && <div className="mt-6 space-y-4 border-t border-[var(--line)] pt-5">
       <h3 className="font-serif text-xl">Review certificate #{request.certificate.certificateNo}</h3>
-      <div className="max-w-3xl"><Certificate draft tilt={false} cert={{ id: request.certificate.certificateNo, recipient: request.certificate.recipientName, seminar: request.certificate.seminarTitle, iso: request.certificate.seminarDate, status: 'Pending' }} /></div>
+      <div className="max-w-3xl"><Certificate draft tilt={false} cert={{ id: request.certificate.certificateNo, recipient: request.certificate.recipientName, seminar: request.certificate.seminarTitle, iso: request.certificate.seminarDate, status: 'Pending', template: request.certificate.template }} /></div>
       <dl className="grid gap-2 text-sm">
         <div><dt className="font-medium">Recipient</dt><dd className="break-words">{request.certificate.recipientName}</dd></div>
         <div><dt className="font-medium">Seminar and date</dt><dd className="break-words">{request.certificate.seminarTitle} · {request.certificate.seminarDate}</dd></div>

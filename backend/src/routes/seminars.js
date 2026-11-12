@@ -23,39 +23,111 @@ router.get("/faculty/seminars", async (_req, res) => {
       SELECT c."seminarID",
              count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NOT NULL AND c.status IN ('PENDING', 'FAILED'))::int AS "readyCount",
              count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NULL AND c.status = 'PENDING')::int AS "awaitingCount",
-             count(*) FILTER (WHERE c.status = 'ISSUED')::int AS "issuedCount"
+             count(*) FILTER (WHERE c.status = 'ISSUED')::int AS "issuedCount",
+             count(*)::int AS "certificateCount"
       FROM certificate c JOIN seminar_registration cr USING ("seminarID", "studentID") GROUP BY c."seminarID")
     SELECT s."seminarID", s."seminarTitle", to_char(s."seminarDate", 'YYYY-MM-DD') AS "seminarDate", s."createdBy",
+           s."templateID"::text AS "templateID", t."name" AS "templateName",
            count(r."studentID")::int AS "registrationCount",
            count(r."studentID") FILTER (WHERE r."attended")::int AS "attendanceCount",
            count(w."studentWalletID")::int AS "walletCount",
            coalesce(certs."readyCount", 0) AS "readyCount", coalesce(certs."awaitingCount", 0) AS "awaitingCount",
-           coalesce(certs."issuedCount", 0) AS "issuedCount"
+           coalesce(certs."issuedCount", 0) AS "issuedCount", coalesce(certs."certificateCount", 0) AS "certificateCount"
     FROM seminar s LEFT JOIN seminar_registration r ON r."seminarID" = s."seminarID"
     LEFT JOIN student_wallet w ON w."studentID" = r."studentID"
     LEFT JOIN certs ON certs."seminarID" = s."seminarID"
-    GROUP BY s."seminarID", certs."readyCount", certs."awaitingCount", certs."issuedCount"
+    LEFT JOIN certificate_template t ON t."templateID" = s."templateID"
+    GROUP BY s."seminarID", t."templateID", certs."readyCount", certs."awaitingCount", certs."issuedCount", certs."certificateCount"
     ORDER BY s."seminarDate" DESC, s."seminarID" DESC
   `);
   res.json(rows);
 });
 
-router.post("/faculty/seminars", async (req, res) => {
-  const title = typeof req.body?.seminarTitle === "string" ? req.body.seminarTitle.trim() : "";
-  const date = req.body?.seminarDate;
+// Returns { title, date } or { error } for a create/edit request body.
+function readSeminarFields(body) {
+  const title = typeof body?.seminarTitle === "string" ? body.seminarTitle.trim() : "";
+  const date = body?.seminarDate;
   if (!title || title.length > 255 || /[\u0000-\u001f\u007f]/.test(title)) {
-    return res.status(400).json({ error: "Enter a seminar title containing 1–255 characters." });
+    return { error: "Enter a seminar title containing 1–255 characters." };
   }
   if (typeof date !== "string" || !/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(date) ||
       !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
-    return res.status(400).json({ error: "Enter a valid seminar date in YYYY-MM-DD format." });
+    return { error: "Enter a valid seminar date in YYYY-MM-DD format." };
   }
-  const { rows } = await pool.query(
-    `INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy") VALUES ($1, $2, $3)
-     RETURNING "seminarID", "seminarTitle", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate", "createdBy"`,
-    [title, date, req.faculty.facultyID],
-  );
-  res.status(201).json(rows[0]);
+  // Certificate design: null (or absent) = built-in; otherwise an existing template's ID.
+  const templateID = body?.templateID ?? null;
+  if (templateID !== null && (typeof templateID !== "string" || !/^[1-9]\d{0,18}$/.test(templateID))) {
+    return { error: "Choose a valid certificate design." };
+  }
+  return { title, date, templateID };
+}
+
+const SEMINAR_COLUMNS = `"seminarID", "seminarTitle", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate", "createdBy", "templateID"::text AS "templateID"`;
+const MISSING_TEMPLATE = "That certificate design no longer exists. Choose another one.";
+
+router.post("/faculty/seminars", async (req, res) => {
+  const { title, date, templateID, error } = readSeminarFields(req.body);
+  if (error) return res.status(400).json({ error });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy", "templateID") VALUES ($1, $2, $3, $4) RETURNING ${SEMINAR_COLUMNS}`,
+      [title, date, req.faculty.facultyID, templateID],
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    if (err.code === "23503" && err.constraint?.includes("template")) return res.status(400).json({ error: MISSING_TEMPLATE });
+    throw err;
+  }
+});
+
+// Fixing a mistaken seminar is only allowed before any certificate exists: certificates copy its title and date.
+// The seminar row lock serializes this with attendance import and certificate preparation.
+async function changeUnusedSeminar(seminarID, res, change) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const seminar = await client.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1 FOR UPDATE`, [seminarID]);
+    if (!seminar.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Seminar not found." });
+    }
+    const used = await client.query(`SELECT 1 FROM certificate WHERE "seminarID" = $1 LIMIT 1`, [seminarID]);
+    if (used.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Certificates have already been prepared for this seminar, so its title, date and attendance record can no longer be changed or deleted." });
+    }
+    const result = await change(client);
+    await client.query("COMMIT");
+    return result === undefined ? res.status(204).end() : res.json(result);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally { client.release(); }
+}
+
+router.patch("/faculty/seminars/:seminarID", async (req, res) => {
+  const { title, date, templateID, error } = readSeminarFields(req.body);
+  if (error) return res.status(400).json({ error });
+  const keepTemplate = !Object.hasOwn(req.body ?? {}, "templateID");
+  await changeUnusedSeminar(req.params.seminarID, res, async client => {
+    // FOR SHARE keeps the chosen template from being deleted before this commits.
+    if (!keepTemplate && templateID !== null && !(await client.query(
+      `SELECT 1 FROM certificate_template WHERE "templateID" = $1 FOR SHARE`, [templateID])).rowCount) {
+      throw new IssuanceError(400, MISSING_TEMPLATE);
+    }
+    return (await client.query(
+      `UPDATE seminar SET "seminarTitle" = $2, "seminarDate" = $3, "templateID" = CASE WHEN $5 THEN "templateID" ELSE $4::bigint END
+       WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
+      [req.params.seminarID, title, date, templateID, keepTemplate])).rows[0];
+  });
+});
+
+// Deleting also removes the seminar's attendance rows; it never touches student accounts.
+router.delete("/faculty/seminars/:seminarID", requireCanIssue, async (req, res) => {
+  await changeUnusedSeminar(req.params.seminarID, res, async client => {
+    await client.query(`DELETE FROM seminar_registration WHERE "seminarID" = $1`, [req.params.seminarID]);
+    await client.query(`DELETE FROM seminar WHERE "seminarID" = $1`, [req.params.seminarID]);
+  });
 });
 
 router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {

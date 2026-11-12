@@ -6,7 +6,6 @@ const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { m
 const STATUS_CONFIG = {
   Verified: { color: '#157347' },
   Revoked: { color: '#b3261e' },
-  Pending: { color: '#a96a0c' },
 };
 
 export default function StudentDashboardPage({ certificates = [], onCertificateClick, onVerifyClick, onDownloadClick, onNavigateCollection, walletAddress }) {
@@ -15,7 +14,7 @@ export default function StudentDashboardPage({ certificates = [], onCertificateC
   const sortedCerts = [...certificates].sort((a, b) => b.iso.localeCompare(a.iso));
   const featured = sortedCerts.find(c => c.status === 'Verified') || sortedCerts[0];
   
-  const counts = { Verified: 0, Pending: 0, Revoked: 0 };
+  const counts = { Verified: 0, Revoked: 0 };
   sortedCerts.forEach(c => counts[c.status]++);
   
   const totalIssued = sortedCerts.length;
@@ -150,12 +149,10 @@ export default function StudentDashboardPage({ certificates = [], onCertificateC
             </div>
             <div className="flex h-2 rounded-full overflow-hidden mt-5 bg-paper-2">
               <div className="fillbar" style={{ width: (counts.Verified / totalIssued * 100) + '%', background: 'var(--verified)' }}></div>
-              <div className="fillbar" style={{ width: (counts.Pending / totalIssued * 100) + '%', background: 'var(--pending)' }}></div>
               <div className="fillbar" style={{ width: (counts.Revoked / totalIssued * 100) + '%', background: 'var(--revoked)' }}></div>
             </div>
             <div className="flex gap-4 mt-3 text-xs text-ink-muted font-medium">
               <span><b className="text-verified">{counts.Verified}</b> Verified</span>
-              <span><b className="text-pending">{counts.Pending}</b> Pending</span>
               <span><b className="text-revoked">{counts.Revoked}</b> Revoked</span>
             </div>
           </div>

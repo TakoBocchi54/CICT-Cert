@@ -6,6 +6,7 @@ import { polygonAmoy } from "viem/chains";
 import { pool } from "../db/pool.js";
 import { requireStudent } from "../middleware/requireStudent.js";
 import { secret } from "../utils/session.js";
+import { certificateTemplateSql } from "../utils/certificateTemplate.js";
 import { certificateContract, certificateIssuer } from "../services/certificates.js";
 import { certificateHash, certificateConsentMessage } from "../utils/certificateConsent.js";
 import { autoIssueTick } from "../services/autoIssue.js";
@@ -40,7 +41,7 @@ router.get("/student/certificates", async (req, res) => {
     `SELECT c."certificateID", c."certificateNo", c."recipientName", c."seminarTitle",
             to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", c.status, c."consentedAt",
             r.attended, w."studentWalletAddress" AS "walletAddress", i."issuerWalletAddress" AS "issuerAddress",
-            c."certificateHash", c."issuedAt", b."tokenID", b."transactionHash", b."blockNum"
+            c."certificateHash", c."issuedAt", b."tokenID", b."transactionHash", b."blockNum", ${certificateTemplateSql("c")}
      FROM certificate c JOIN seminar_registration r USING ("seminarID", "studentID")
      JOIN issuer_wallet i USING ("issuerWalletID") LEFT JOIN student_wallet w ON w."studentID" = c."studentID"
      LEFT JOIN LATERAL (SELECT "tokenID", "transactionHash", "blockNum" FROM blockchain_record
@@ -62,7 +63,7 @@ async function lockCertificate(client, certificateID, studentID) {
   const { rows } = await client.query(
     `SELECT c.*, to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", r.attended,
             w."studentWalletID" AS "linkedWalletID", w."studentWalletAddress" AS "walletAddress",
-            i."issuerWalletAddress" AS "issuerAddress", i."isActive", i.network
+            i."issuerWalletAddress" AS "issuerAddress", i."isActive", i.network, ${certificateTemplateSql("c")}
      FROM certificate c JOIN seminar_registration r USING ("seminarID", "studentID")
      JOIN issuer_wallet i USING ("issuerWalletID") LEFT JOIN student_wallet w ON w."studentID" = c."studentID"
      WHERE c."certificateID" = $1 AND c."studentID" = $2 FOR UPDATE OF c`, [certificateID, studentID],
@@ -99,7 +100,7 @@ router.post("/student/certificates/:certificateID/consent-request", async (req, 
     await client.query("COMMIT");
     res.json({ certificate: { certificateID: certificate.certificateID, certificateNo: certificate.certificateNo,
       recipientName: certificate.recipientName, seminarTitle: certificate.seminarTitle, seminarDate: certificate.seminarDate,
-      walletAddress: certificate.walletAddress }, context, message, challenge });
+      walletAddress: certificate.walletAddress, template: certificate.template }, context, message, challenge });
   } catch (err) { await client.query("ROLLBACK"); throw err; }
   finally { client.release(); }
 });
