@@ -56,11 +56,36 @@ CREATE TABLE issuer_wallet (
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Faculty-uploaded certificate designs. Rendering only: the certificate hash never includes the template.
+CREATE TABLE certificate_template (
+    "templateID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "name" VARCHAR(100) NOT NULL CHECK (btrim("name") <> ''),
+    "image" BYTEA NOT NULL,
+    "imageType" VARCHAR(20) NOT NULL CHECK ("imageType" IN ('image/png', 'image/jpeg')),
+    "imageWidth" INTEGER NOT NULL CHECK ("imageWidth" > 0),
+    "imageHeight" INTEGER NOT NULL CHECK ("imageHeight" > 0),
+    "fields" JSONB NOT NULL,
+    "createdBy" BIGINT NOT NULL REFERENCES cict_faculty ("facultyID"),
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE certificate_template_signature (
+    "signatureID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "templateID" BIGINT NOT NULL REFERENCES certificate_template ("templateID") ON DELETE CASCADE,
+    "image" BYTEA NOT NULL,
+    "imageType" VARCHAR(20) NOT NULL CHECK ("imageType" IN ('image/png', 'image/jpeg')),
+    "imageWidth" INTEGER NOT NULL CHECK ("imageWidth" > 0),
+    "imageHeight" INTEGER NOT NULL CHECK ("imageHeight" > 0)
+);
+
 CREATE TABLE seminar (
     "seminarID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "seminarTitle" VARCHAR(255) NOT NULL CHECK (btrim("seminarTitle") <> ''),
     "seminarDate" DATE NOT NULL,
     "createdBy" BIGINT NOT NULL REFERENCES cict_faculty ("facultyID"),
+    -- NULL = built-in design.
+    "templateID" BIGINT REFERENCES certificate_template ("templateID") ON DELETE SET NULL,
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -191,6 +216,9 @@ CREATE UNIQUE INDEX uq_certificate_active_registration
     ON certificate ("seminarID", "studentID") WHERE "status" <> 'REVOKED';
 CREATE INDEX idx_registration_student ON seminar_registration ("studentID");
 CREATE INDEX idx_seminar_created_by ON seminar ("createdBy");
+CREATE INDEX idx_seminar_template ON seminar ("templateID");
+CREATE INDEX idx_template_signature_template ON certificate_template_signature ("templateID");
+CREATE INDEX idx_template_created_by ON certificate_template ("createdBy");
 
 ALTER TABLE blockchain_record
     ADD CONSTRAINT fk_blockchain_requested_by FOREIGN KEY ("requestedBy") REFERENCES cict_faculty ("facultyID"),

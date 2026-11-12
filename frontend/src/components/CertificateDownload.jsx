@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Btn, Certificate } from './design-system';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
+import { pageSizeMm } from '../lib/certificateTemplate';
 
 export default function CertificateDownload({ cert, onClose }) {
   const dialog = useRef(null);
@@ -23,10 +24,9 @@ export default function CertificateDownload({ cert, onClose }) {
         import('html-to-image'), import('../lib/certificatePdf'),
       ]);
       const node = exportTemplate.current.firstElementChild;
-      const [width, height = 1] = getComputedStyle(node).aspectRatio.split('/').map(Number);
       const png = await toPng(node, { pixelRatio: 3, preferredFontFormat: 'woff2',
         filter: element => !element.classList?.contains('cert-reveal') });
-      const bytes = await createCertificatePdf(png, width / height, cert.id);
+      const bytes = await createCertificatePdf(png, pageSizeMm(cert.template), cert.id);
       const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;

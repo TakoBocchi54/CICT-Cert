@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifyCertificate, certificateIssuer } from "../services/certificates.js";
 import { pool } from "../db/pool.js";
 import { certificateHash } from "../utils/certificateConsent.js";
+import { certificateTemplateSql } from "../utils/certificateTemplate.js";
 
 const router = Router();
 
@@ -25,7 +26,8 @@ router.get("/certificates/verify/:certHash", async (req, res) => {
             try {
                 const { rows } = await pool.query(
                     `SELECT c."certificateNo", c."recipientName", c."seminarTitle",
-                            to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", w."studentWalletAddress" AS "walletAddress"
+                            to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", w."studentWalletAddress" AS "walletAddress",
+                            ${certificateTemplateSql("c")}
                      FROM certificate c LEFT JOIN student_wallet w ON w."studentWalletID" = c."studentWalletID"
                      WHERE c."certificateHash" = $1`, [certHash.toLowerCase()],
                 );
@@ -35,7 +37,7 @@ router.get("/certificates/verify/:certHash", async (req, res) => {
                 if (saved?.walletAddress?.toLowerCase() === recipient.toLowerCase() &&
                     certificateHash(saved, context) === certHash.toLowerCase()) {
                     certificate = { certificateNo: saved.certificateNo, recipientName: saved.recipientName,
-                        seminarTitle: saved.seminarTitle, seminarDate: saved.seminarDate };
+                        seminarTitle: saved.seminarTitle, seminarDate: saved.seminarDate, template: saved.template };
                     detailsStatus = "Verified";
                 }
             } catch (err) {

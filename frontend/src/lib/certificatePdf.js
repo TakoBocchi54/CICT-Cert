@@ -1,10 +1,10 @@
 import { PDFDocument } from 'pdf-lib';
 
-export async function createCertificatePdf(png, aspectRatio, certificateNo) {
-  if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) throw new Error('Invalid certificate proportions.');
+// One page of [widthMm, heightMm] (the template's paper size), filled with the rendered certificate image.
+export async function createCertificatePdf(png, pageMm, certificateNo) {
+  if (!Array.isArray(pageMm) || !pageMm.every(mm => Number.isFinite(mm) && mm > 0)) throw new Error('Invalid certificate page size.');
   const document = await PDFDocument.create();
-  const width = 297 * 72 / 25.4;
-  const height = width / aspectRatio;
+  const [width, height] = pageMm.map(mm => mm * 72 / 25.4);
   const page = document.addPage([width, height]);
   const image = await document.embedPng(png);
   page.drawImage(image, { x: 0, y: 0, width, height });

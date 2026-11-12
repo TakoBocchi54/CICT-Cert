@@ -49,7 +49,7 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
 
       {/* Filter Pills */}
       <div className="flex gap-2 mb-8">
-        {['All', 'Verified', 'Pending', 'Revoked'].map(f => (
+        {['All', 'Verified', 'Revoked'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -80,11 +80,10 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
               <div className="cursor-pointer" onClick={() => onCertificateClick(c)}>
                 <Certificate cert={c} />
               </div>
-              <div className="flex items-center justify-between mt-4 px-1">
-                <div className="font-mono text-xs text-ink-muted">{c.id}</div>
+              <div className="flex items-center justify-between gap-3 mt-3">
+                <Btn variant="line" size="sm" icon="ph-download-simple" onClick={() => onDownloadClick(c)}>Download PDF</Btn>
                 <Pill status={c.status} />
               </div>
-              <Btn variant="line" size="sm" className="mt-3" icon="ph-download-simple" onClick={() => onDownloadClick(c)}>Download PDF</Btn>
             </div>
           ))}
         </div>

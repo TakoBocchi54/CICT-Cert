@@ -166,7 +166,7 @@ export default function FacultyDashboardPage({
                 ))}
               </div>
               <Btn variant="line" size="sm" className="mt-6" onClick={onNavigateRevocation}>
-                Manage revocations
+                View revoked certificates
               </Btn>
             </>
           )}

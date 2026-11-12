@@ -269,6 +269,14 @@ body {
   color: var(--ink);
 }
 
+.cert[data-template] {
+  background: #fff;
+}
+.cert[data-template]::before,
+.cert[data-template]::after {
+  display: none;
+}
+
 .cert[data-theme="modern"] {
   --accent: #16231d;
   --accent2: #3a4a41;

@@ -9,9 +9,11 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
     role === 'faculty'
       ? [
           ['faculty-dashboard', 'Dashboard'],
-          ['faculty-issue', 'Seminars'],
+          ['faculty-seminars', 'Seminars'],
+          ['faculty-issue', 'Issue'],
+          ['faculty-templates', 'Templates'],
           ['faculty-students', 'Students'],
-          ['faculty-revocation', 'Revocations'],
+          ['faculty-registry', 'Registry'],
         ]
       : [
           ['student-dashboard', 'Portfolio'],

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
@@ -9,7 +10,8 @@ import DoneCard from './DoneCard';
 
 // Upload → preview → (register unknown attendees) → confirm. The draft ({ name, csv, aliases, preview }) survives tab
 // switches and reloads; a stale preview is still rejected by the server on confirm.
-export default function AttendanceImport({ seminarID, attendanceCount, disabled, onSaved }) {
+// The step's footer action (Continue, or Confirm once a file is reviewed) is rendered into actionSlot, the wizard footer.
+export default function AttendanceImport({ seminarID, attendanceCount, disabled, onSaved, actionSlot, onContinue }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [draft, setDraft] = useSessionDraft('cict-attendance-' + seminarID);
@@ -83,32 +85,50 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
             <p className="text-xs text-ink-muted mt-3">{preview.removed.length} previously attended will be marked absent</p>
           </div>
         </div>
-        {preview.matched.length > 0 && <details>
-          <summary className="cursor-pointer text-sm font-medium">Matched attendees ({preview.matched.length})</summary>
-          <ul className="mt-2 space-y-2 text-sm text-ink-soft">{preview.matched.map(student => <li key={student.studentID} className="break-words">
-            {student.fullName} — {student.email}{student.listedAs && <span className="text-ink-muted"> (listed as {student.listedAs})</span>}
-          </li>)}</ul>
-        </details>}
-        {preview.removed.length > 0 && <details>
-          <summary className="cursor-pointer text-sm font-medium">Attendance to clear ({preview.removed.length})</summary>
-          <ul className="mt-2 space-y-2 text-sm text-ink-soft">{preview.removed.map(student => <li key={student.studentID} className="break-words">{student.fullName} — {student.email}</li>)}</ul>
-        </details>}
+        {preview.matched.length > 0 && <PreviewTable title={`Matched attendees (${preview.matched.length})`} head={['Name', 'Google account', 'Wallet', 'Attendance']}>
+          {preview.matched.map(student => <tr key={student.studentID} className="border-t border-[var(--line)]">
+            <td className="p-3 font-medium">{student.fullName}</td>
+            <td className="p-3 break-all">{student.email}{student.listedAs && <span className="block text-xs text-ink-muted">Listed as {student.listedAs}</span>}</td>
+            <td className="p-3">{student.walletConnected ? 'Connected' : <span className="text-ink-muted">Not signed in yet</span>}</td>
+            <td className="p-3">Attended</td>
+          </tr>)}
+        </PreviewTable>}
+        {preview.removed.length > 0 && <PreviewTable title={`Attendance to clear (${preview.removed.length})`} head={['Name', 'Google account', 'Change']}>
+          {preview.removed.map(student => <tr key={student.studentID} className="border-t border-[var(--line)]">
+            <td className="p-3 font-medium">{student.fullName}</td>
+            <td className="p-3 break-all">{student.email}</td>
+            <td className="p-3 text-revoked">Will be marked absent</td>
+          </tr>)}
+        </PreviewTable>}
         {notMatched > 0 && <UnregisteredPrompt key={preview.previewHash} preview={preview} disabled={busy}
           onUseAccount={(listed, account) => reviewDraft({ ...draft.aliases, [listed]: account })} onRegistered={() => reviewDraft()} />}
         {preview.blocked.length > 0 && <div role="alert" className="text-sm text-revoked">
           <p>Attendance cannot be cleared while these students have an issued certificate or an unresolved blockchain transaction:</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">{preview.blocked.map(student => <li key={student.studentID} className="break-words">{student.fullName} — {student.email}</li>)}</ul>
         </div>}
-        <div className="flex flex-wrap items-center gap-3">
-          <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
-            {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
-          </Btn>
-          <span className="text-xs text-ink-muted">{preview.canSave ? 'Preparing certificates does not mint or spend POL.' : 'Every listed email must match a registered student before you can confirm.'}</span>
-        </div>
       </div>}
+      {actionSlot && createPortal(preview
+        ? <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
+          {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
+        </Btn>
+        : <Btn variant="line" iconRight="ph-arrow-right" onClick={onContinue}>Continue to Approvals</Btn>, actionSlot)}
     </div>
   );
 }
+
+// Fixed-height preview table with a sticky header, like the Seminars and Registry tables.
+const PreviewTable = ({ title, head, children }) => (
+  <section className="sheet overflow-hidden">
+    <h3 className="border-b border-[var(--line)] px-5 py-4 text-sm font-semibold">{title}</h3>
+    <div className="max-h-[360px] overflow-auto">
+      <table className="w-full min-w-[560px] text-left text-sm">
+        <caption className="sr-only">{title}</caption>
+        <thead className="sticky top-0 z-10 bg-paper-2"><tr>{head.map(h => <th key={h} scope="col" className="p-3">{h}</th>)}</tr></thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  </section>
+);
 
 // "N students in this list aren't registered yet. Register them?" Guards against creating wrong accounts:
 // suggested matches start unticked (2), names and programs are editable (3), "Use this account" maps a typo to an

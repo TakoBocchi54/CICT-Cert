@@ -1,6 +1,6 @@
 # CICT-Cert: Project context, progress, and next steps
 
-Updated: **12 November 2026 (Asia/Manila)**: student accounts are now separate from seminars (Students tab; attendance matched against all accounts, with a guarded "register them?" prompt), and the Seminars tab is a 4-step wizard. Earlier: revocation, replacement, optional auto-issuance, real faculty dashboard data and a test-data reset script. See section 10 for where to resume.
+Updated: **12 November 2026 (Asia/Manila)**: student accounts are now separate from seminars (Students tab; attendance matched against all accounts, with a guarded "register them?" prompt), and the 4-step wizard tab is now called **Issue**, next to a read-only **Seminars** tab. Earlier: revocation, replacement, optional auto-issuance, real faculty dashboard data and a test-data reset script. See section 10 for where to resume.
 
 This is a handoff for continuing the project. It records the agreed scope, the implementation currently in the workspace, checks completed during development, known gaps, and the recommended next task. Working locally does not mean the same changes are already deployed.
 
@@ -71,7 +71,7 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 8. **Students see issued certificates** on the dashboard and in their collection.
 9. **Students download a certificate PDF** containing the design, certificate hash, and verification QR.
 10. **Anyone verifies publicly**, using the QR/hash, or reads the contract through the block explorer.
-11. **Faculty revokes an issued certificate** on the Revocations page by certificate number, with a required reason. The backend signs, broadcasts and reconciles `revoke(tokenId)` and marks the certificate `REVOKED` only after finality.
+11. **Faculty revokes an issued certificate** from the Registry tab: a row's **Revoke** opens the revocation page for that certificate, which needs a reason. The backend signs, broadcasts and reconciles `revoke(tokenId)` and marks the certificate `REVOKED` only after finality.
 12. **Faculty prepares a replacement** for a revoked certificate with corrected facts and a new number. The student approves it, and faculty issue it through step 7.
 
 The user confirmed successful local registration/attendance work, student-related flows, real Amoy issuance, and PDF download during development. Public metadata and the latest layout fixes were also checked with isolated browser tests. On 10 November the user confirmed a real Amoy revocation through the new portal flow (certificate No. 1, reason "Revocation test"). The replacement flow has not yet been tried manually.
@@ -317,7 +317,7 @@ The mockup is the original prototype; global CSS and the login, student, revocat
   - The button opens `/faculty/issue?seminar=<id>`, which preselects that seminar.
   - Beside it, an **Issuance progress** panel replaces the mockup's fake attendance-processing panel: the 3 latest seminars, sorted latest to oldest, each with an issued-of-attended bar and ready and awaiting counts.
   - Test added to `issuance.test.js`. Not yet viewed in a browser.
-- [x] **Seminars tab as a wizard** (`pages/IssuancePage.jsx`; 5 steps on 11 November, **4 steps since 12 November** after the Registrations step moved to the Students tab), following the mockup's stage rail but mapped to the real flow: Seminar (pick or create), Registrations, Attendance, Approvals, Issue. The mockup's Eligibility and Template stages were left out (no attendance rule; one certificate design).
+- [x] **Seminars tab as a wizard** (renamed **Issue** on 12 November; `pages/IssuancePage.jsx`; 5 steps on 11 November, **4 steps since 12 November** after the Registrations step moved to the Students tab), following the mockup's stage rail but mapped to the real flow: Seminar (pick or create), Registrations, Attendance, Approvals, Issue. The mockup's Eligibility and Template stages were left out (no attendance rule; one certificate design).
   - The rail is always clickable. A seminar opens at its first unfinished step, worked out from the seminar-list counts, and each step shows a done tick and a short count.
   - All step panels stay mounted (hidden when inactive), so switching steps keeps files and running issuance batches.
   - Shared `components/CsvDropZone.jsx` (drag-and-drop or browse) replaces the file inputs.
@@ -326,10 +326,29 @@ The mockup is the original prototype; global CSS and the login, student, revocat
   - **Confirming attendance now also prepares certificates** (if the faculty member has `canIssue`) and jumps to Approvals. A failed preparation is reported without undoing the saved attendance.
   - `CertificatePreparation` takes `mode="approvals" | "issue"`. `GET /api/auth/faculty/me` now returns `autoIssue`. With it on, the Issue step shows "Issuing automatically", refreshes every 15 s and keeps "Issue now" as a fallback.
   - Checked with lint, build and a jsdom harness (step selection, rail clicks, draft surviving a remount). Not yet viewed in a real browser.
+- [x] **Issue + Seminars tabs** (12 November). The wizard tab (`/faculty/issue`) is now labelled **Issue**; creating seminars stays there (user's choice).
+  - New read-only **Seminars** tab (`pages/SeminarsPage.jsx`, `/faculty/seminars`): seminar list, and for the selected seminar the summary counts, attendees (`GET .../registrations`) and certificates (`GET .../certificates`, with Verify for issued/revoked). No backend change.
+  - Issue tab: the seminar list was removed from step 1, which is now only the **New seminar** form. A **Seminar** dropdown in the header switches seminars (opening each at its first unfinished step).
+  - **Edit / delete a mistaken seminar** (`components/SeminarEditDialog.jsx`, **Edit** button beside the seminar dropdown): any faculty can fix the title/date; `canIssue` faculty can delete it (its attendance rows go too). Both only until a certificate exists, since certificates copy the title and date (`PATCH`/`DELETE /api/faculty/seminars/:id`, seminar row locked; `certificateCount` added to the seminar list). Tests in `seminars.test.js`.
+  - Status wording for a seminar certificate now lives in `lib/certificateProgress.js`, shared with `CertificatePreparation`.
+  - Checked with lint, build and a jsdom harness. Not yet viewed in a real browser.
 - [ ] Custom faculty certificate templates (upload their own design): agreed as a separate feature after the wizard.
-- [ ] Step 2, public verifier restyle (hero, "Inspecting credential..." steps, colored result banner). Ask about the QR-scan tab first.
-- [ ] Step 3, faculty Registry page (new endpoint, route and nav item).
-- [ ] Step 4, certificate detail page.
+- [x] **Step 2, public verifier restyle** (`pages/VerifierPortalPage.jsx`, 12 November). The request, hash validation and `detailsStatus` handling are unchanged.
+  - Centered hero with seal and the hash form in a `sheet tick-corners` card.
+  - The "Inspecting certificate…" screen lists the three checks together under one spinner (one request does all of them, so there is no fake timed ticking).
+  - A colored result banner (seal, rosette) is followed, **only when the stored details re-hash to the on-chain record**, by the rendered certificate (with its QR and stamp) plus an Inspection record panel. Otherwise only the Blockchain record panel and the existing warning are shown.
+  - The **QR-scan tab was skipped** (user's choice): phone camera apps already open `/verify?id=…`, and a scanner needs a new dependency.
+  - `Certificate.jsx` now hides "Block #" when no block number is given, instead of showing "Block #0".
+  - Checked with lint, build and a jsdom harness (Valid, Revoked, Mismatch and NotFound results, plus the idle form). Not yet viewed in a real browser.
+- [x] **Step 3, faculty Registry page** (`pages/RegistryPage.jsx`, `/faculty/registry`, nav item **Registry**, 12 November).
+  - `GET /api/faculty/certificates?q=&status=` (in `routes/revocations.js`) lists only certificates that reached the chain (`ISSUED`/`REVOKED`), newest issued first, first 200 matches (`shortcut:` comment, like the Students list). Search covers name, email, seminar title and exact certificate number.
+  - Status chips (All / Verified / Revoked), debounced search, and a **fixed-height table** (560 px, scrolls inside the card, sticky header), as the user asked.
+  - Each row has **Verify** (public verifier in a new tab) and **Revoke** / **Details**, which opens the Revocations page at `?no=<number>` with that certificate already looked up (`RevocationPage` takes `initialNo`).
+  - Test added to `revocation.test.js`; checked with lint, build and a jsdom harness. Not yet viewed in a real browser.
+- [x] **Step 4, certificate detail page, students only** (`pages/StudentCertificatePage.jsx`, `/student/certificates/<number>`, 12 November). Faculty use the Registry's **Details** button, which opens the Revocations page.
+  - Clicking a certificate on the student dashboard or collection now opens this page instead of the download popup. The **Download** buttons still open the popup, and the page's **Download PDF** reuses it.
+  - The page shows the certificate with its real QR, a status seal, and a blockchain record: number, network, ERC-5484, token ID, block, and the issuing transaction linked to Polygonscan. It has **Verify** and **Back to my certificates**, plus a "Certificate not found" state for a number outside the student's collection.
+  - No backend change: it uses the student certificate list App already loads. Checked with lint, build and a jsdom harness. Not yet viewed in a real browser.
 - [ ] Step 5, Share modal, only if the user wants it.
 
 ### Done (12 November): student accounts separate from seminars
@@ -374,6 +393,34 @@ Differences from the plan: no separate domain-typo list, because the "same part 
 **Tests.** New `students.test.js` (bulk, single, validation, faculty-email rejection, idempotence, search, delete allowed/blocked, auth). Rewritten attendance tests in `seminars.test.js` (all-account matching, rows created on confirm, aliases, each suggestion rule, hints, faculty emails, stale hash after registering, removal/blocking unchanged). Registration-import tests moved to the students tests. Frontend: lint, build and the jsdom harness. Every phase ends with `npm test` green.
 
 **Accepted limits.** No per-seminar sign-up list before the event. No profile editing outside the attendance prompt (name fixes after issuance remain revoke-and-replace). "Never signed in" is approximated by "no linked wallet".
+
+### Done (13 November): custom certificate templates
+
+Faculty can design certificates instead of always using the built-in layout. The backend rules are in `backend/README.md` ("Certificate templates").
+
+- **Templates tab** (`/faculty/templates`, `TemplatesPage.jsx`, `TemplateEditor.jsx`).
+  - Upload a PNG/JPG background: A4 or US Letter, landscape or portrait, detected from the proportions.
+  - Drag (or move with the arrow keys) the recipient name, seminar title, date, certificate number and QR code into place, and set their font, size, color, alignment and width.
+  - Title, date and number can be hidden; name and QR are always shown.
+  - Up to 3 signature images (e.g. the Dean's), each with an optional printed name/title and line.
+  - Templates are shared by all faculty. The creator or a `canIssue` faculty can edit one until certificates use it; then it locks.
+- **Per seminar:** "Certificate design" in the New seminar form and the seminar Edit popup (`TemplatePicker.jsx`). The Seminars tab shows each seminar's design. The choice locks with the title and date once certificates are prepared.
+- **Rendering:** `Certificate.jsx` draws the template (falling back to `cert.template`). The student approval preview, collection, detail page, PDF and `/verify` all use it.
+  - The PDF page size follows the template's paper size: `createCertificatePdf(png, [wMm, hMm], no)`.
+  - The certificate hash, consent message and contract are unchanged.
+- **Schema:** migration `006_certificate_templates.sql`. Apply it to the local and Supabase databases before running this version.
+- **Tests:**
+  - New `templates.test.js` and `certificateTemplate.test.js`, plus a template case in `seminars.test.js` (backend: 114 pass).
+  - `certificatePdf.test.js` updated.
+  - jsdom harness for the editor (drag, keyboard nudge, hide field, alignment, signature upload and caption, save payload, locked read-only) and for the picker.
+- **Not yet checked in a real browser:** the editor, the thumbnails, and PDF export with a template background (html-to-image must embed the same-origin image).
+- **Skipped:** duplicating a locked template, extra fields (hash text, program), Legal paper, custom fonts.
+
+### Done (13 November): Revocations tab folded into the Registry
+
+- The faculty menu no longer has a **Revocations** tab.
+- The revocation page (`/faculty/revocation?no=<number>`) is still the place to revoke, check a pending revoke transaction or prepare a replacement. It's opened from a Registry row's **Revoke** / **Details**, keeps the Registry tab highlighted, and has a **Back to registry** link.
+- The dashboard's "View revoked certificates" button opens the Registry with the Revoked filter (`?status=REVOKED`).
 
 ## 5. Certificate hash, statuses, and explorer context
 
@@ -570,7 +617,7 @@ Keep `.env`, issuer private keys, passwords, cookie values, identity tokens, con
 7. Show the student's dashboard/collection, full hash, and PDF download with the QR beside the seal.
 8. Open public verification in a logged-out browser. Show the recipient/seminar/number and matching blockchain details.
 9. Optionally query `verify(certHash)` in the explorer; explain numeric status and contract address versus student recipient.
-10. Optionally revoke a test certificate on the Revocations page with a reason, check the transaction until finalized, and show the public verifier reporting Revoked. Then prepare a replacement with corrected details and a new number.
+10. Optionally revoke a test certificate from the Registry (row **Revoke**) with a reason, check the transaction until finalized, and show the public verifier reporting Revoked. Then prepare a replacement with corrected details and a new number.
 
 Use a deployed frontend for a QR demonstration across devices. Avoid creating extra live transactions merely to demonstrate already-issued certificates.
 

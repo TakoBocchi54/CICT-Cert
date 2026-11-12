@@ -62,7 +62,8 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const response = await fetch(base + suffix, { method,
       headers: { "Content-Type": "application/json", ...(session ? { Cookie: session } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: response.status, data: await response.json(), headers: response.headers };
+    const text = await response.text();
+    return { status: response.status, data: text ? JSON.parse(text) : null, headers: response.headers };
   }
   // Student accounts exist independently of seminars (registered in the Students tab).
   await db.query(`
@@ -101,6 +102,46 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     }
     assert.equal((await request("GET", "/999999/registrations")).status, 404);
     assert.equal((await request("GET", "/" + seminarID + "/registrations")).data.length, 0);
+  });
+  await t.test("a mistaken seminar can be corrected by any faculty and deleted with issuance permission before certificates exist", async () => {
+    const issuerCookie = await cookie("FACULTY", "1", "1");
+    assert.equal((await request("PATCH", "/" + seminarID, { seminarTitle: "Fixed", seminarDate: "2026-11-08" }, "")).status, 401);
+    for (const body of [{ seminarTitle: " ", seminarDate: "2026-11-08" }, { seminarTitle: "Fixed", seminarDate: "2026-02-30" }]) {
+      assert.equal((await request("PATCH", "/" + seminarID, body)).status, 400);
+    }
+    assert.equal((await request("PATCH", "/999999", { seminarTitle: "Fixed", seminarDate: "2026-11-08" })).status, 404);
+    const edited = await request("PATCH", "/" + seminarID, { seminarTitle: "  Web Security 101 ", seminarDate: "2026-11-09" });
+    assert.equal(edited.status, 200);
+    assert.deepEqual([edited.data.seminarTitle, edited.data.seminarDate], ["Web Security 101", "2026-11-09"]);
+    const listed = (await request()).data.find(row => row.seminarID === seminarID);
+    assert.deepEqual([listed.seminarTitle, listed.certificateCount], ["Web Security 101", 0]);
+
+    const mistake = (await request("POST", "", { seminarTitle: "Wrong seminar", seminarDate: "2026-11-10" })).data.seminarID;
+    await db.query(`INSERT INTO seminar_registration ("seminarID", "studentID", attended) VALUES ($1, 2, true)`, [mistake]);
+    const students = (await db.query("SELECT count(*) FROM student")).rows[0].count;
+    assert.equal((await request("DELETE", "/" + mistake)).status, 403);
+    assert.equal((await request("DELETE", "/" + mistake, undefined, issuerCookie)).status, 204);
+    assert.equal((await db.query(`SELECT count(*) FROM seminar_registration WHERE "seminarID" = $1`, [mistake])).rows[0].count, "0");
+    assert.equal((await db.query("SELECT count(*) FROM student")).rows[0].count, students);
+    assert.equal((await request("DELETE", "/" + mistake, undefined, issuerCookie)).status, 404);
+  });
+  await t.test("a seminar can choose a certificate template; edits keep it unless templateID is sent", async () => {
+    const templateID = (await db.query(`INSERT INTO certificate_template ("name", "image", "imageType", "imageWidth", "imageHeight", "fields", "createdBy")
+      VALUES ('Gold', decode('00', 'hex'), 'image/png', 1754, 1240, '{}', 1) RETURNING "templateID"::text`)).rows[0].templateID;
+    for (const bad of [42, "abc", "0"]) {
+      assert.equal((await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID: bad })).status, 400);
+    }
+    assert.match((await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID: "999" })).data.error, /no longer exists/);
+    const created = await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.templateID, templateID);
+    const id = created.data.seminarID;
+    assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Designed 2", seminarDate: "2026-11-12" })).data.templateID, templateID);
+    assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Designed 2", seminarDate: "2026-11-12", templateID: "999" })).status, 400);
+    const listed = (await request()).data.find(row => row.seminarID === id);
+    assert.deepEqual([listed.templateID, listed.templateName], [templateID, "Gold"]);
+    assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Designed 2", seminarDate: "2026-11-12", templateID: null })).data.templateID, null);
+    assert.equal((await request("POST", "", { seminarTitle: "Plain", seminarDate: "2026-11-12" })).data.templateID, null);
   });
 
   const attendanceSeminar = await request("POST", "", { seminarTitle: "Attendance test", seminarDate: "2026-11-15" });
@@ -255,5 +296,13 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     assert.equal(unreconciled.data.canSave, false);
     assert.equal((await saveAttendance(withoutIssued, unreconciled.data.previewHash)).status, 409);
     assert.equal((await savedAttendance()).filter(row => row.attended).length, 2);
+  });
+  await t.test("a seminar with certificates can no longer be edited or deleted", async () => {
+    const issuerCookie = await cookie("FACULTY", "1", "1");
+    assert.equal((await request("PATCH", "/" + attendanceID, { seminarTitle: "Renamed", seminarDate: "2026-11-15" })).status, 409);
+    assert.equal((await request("DELETE", "/" + attendanceID, undefined, issuerCookie)).status, 409);
+    const listed = (await request()).data.find(row => row.seminarID === attendanceID);
+    assert.equal(listed.seminarTitle, "Attendance test");
+    assert.ok(listed.certificateCount >= 2);
   });
 });
