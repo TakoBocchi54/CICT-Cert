@@ -254,4 +254,26 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip: 
     assert.ok(data.recentIssued.length <= 4 && data.recentRevoked.length <= 3 && data.recentRevoked.length > 0);
     assert.deepEqual(Object.keys(data.recentRevoked[0]).sort(), ["at", "certificateNo", "recipientName", "seminarTitle"]);
   });
+
+  await t.test("registry lists only on-chain certificates, newest first, with status filter and search", async () => {
+    for (const session of ["", studentCookie]) assert.equal((await request("", { session })).status, 401);
+    const pending = await issuedCertificate({ status: "PENDING" });
+    const all = await request("");
+    assert.equal(all.status, 200);
+    assert.ok(all.data.length > 0 && all.data.every(row => ["ISSUED", "REVOKED"].includes(row.status)));
+    assert.ok(!all.data.some(row => row.certificateNo === pending.no));
+    assert.ok(all.data.some(row => row.status === "REVOKED") && all.data.some(row => row.status === "ISSUED"));
+    const times = all.data.map(row => Date.parse(row.issuedAt));
+    assert.deepEqual(times, [...times].sort((a, b) => b - a));
+    assert.deepEqual(Object.keys(all.data[0]).sort(), ["certificateHash", "certificateNo", "email", "issuedAt", "recipientName", "revokedAt", "seminarDate", "seminarTitle", "status"]);
+    const revoked = await request("?status=REVOKED");
+    assert.ok(revoked.data.length > 0 && revoked.data.every(row => row.status === "REVOKED"));
+    const target = all.data.at(-1);
+    for (const q of [target.certificateNo, "#" + target.certificateNo]) {
+      assert.deepEqual((await request("?q=" + encodeURIComponent(q))).data.map(row => row.certificateNo), [target.certificateNo]);
+    }
+    assert.equal((await request("?q=juan%20dela")).data.length, all.data.length);
+    assert.equal((await request("?q=" + encodeURIComponent(all.data[0].email.toUpperCase()))).data.length, all.data.length);
+    assert.deepEqual((await request("?q=%25")).data, []);
+  });
 });

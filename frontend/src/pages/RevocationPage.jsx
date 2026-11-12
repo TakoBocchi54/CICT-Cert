@@ -22,11 +22,12 @@ function resultMessage(result) {
   return 'Revocation submitted. It is confirmed only after the block is finalized; check the transaction again shortly.';
 }
 
-export default function RevocationPage() {
+export default function RevocationPage({ initialNo = '' }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
-  const [query, setQuery] = useState('');
-  const [certificateNo, setCertificateNo] = useState(null);
+  const [query, setQuery] = useState(initialNo);
+  // Opened from the Registry with ?no=: look that certificate up straight away.
+  const [certificateNo, setCertificateNo] = useState(/^[1-9]\d{0,18}$/.test(initialNo) ? initialNo : null);
   const [invalidQuery, setInvalidQuery] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [reason, setReason] = useState('');

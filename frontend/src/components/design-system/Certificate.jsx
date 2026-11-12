@@ -70,7 +70,7 @@ export const Certificate = ({ cert, theme = 'classic', tilt = true, draft = fals
           <i className={'ph-fill text-[1.8cqw] leading-none ' + (STATUS_CONFIG[cert.status]?.icon || 'ph-question')}></i>
           {draft ? 'Draft - not issued' : cert.status === 'Verified' ? 'Verified on Polygon' : cert.status === 'Revoked' ? 'Revoked by issuer' : 'Awaiting block confirmations'}
         </span>
-        {!draft && <span className="font-mono" style={{ color: '#6a7a70', fontWeight: 400 }}>Block #{cert.block?.toLocaleString() || '0'}</span>}
+        {!draft && cert.block != null && <span className="font-mono" style={{ color: '#6a7a70', fontWeight: 400 }}>Block #{cert.block.toLocaleString()}</span>}
       </div>
     </div>
   );

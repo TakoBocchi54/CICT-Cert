@@ -148,6 +148,7 @@ Faculty look up a certificate by its numeric certificate number. Only an `ISSUED
 
 | Method | Endpoint | Access |
 | --- | --- | --- |
+| GET | `/api/faculty/certificates?q=&status=` | Faculty; Registry list of `ISSUED`/`REVOKED` certificates (optional `status=ISSUED|REVOKED`), newest issued first, first 200 matches. `q` searches recipient name, email and seminar title, or an exact certificate number (`#` optional) |
 | GET | `/api/faculty/certificates/:certificateNo` | Faculty; certificate facts, token ID, mint transaction and latest revocation attempt |
 | POST | `/api/faculty/certificates/:certificateNo/revoke` | Faculty with current `canIssue`; `{ "reason": "..." }`; revoke or resume |
 | POST | `/api/faculty/certificates/:certificateNo/revocation/check` | Faculty with current `canIssue`; reconcile/resubmit the existing attempt, never sign a new one |

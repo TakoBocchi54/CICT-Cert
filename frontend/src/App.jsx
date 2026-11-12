@@ -14,6 +14,7 @@ import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
 import StudentsPage from './pages/StudentsPage';
+import RegistryPage from './pages/RegistryPage';
 import VerifierPortalPage from './pages/VerifierPortalPage';
 
 // Main app content with routing logic
@@ -136,6 +137,7 @@ function AppContent() {
       'faculty-dashboard': '/faculty/dashboard',
       'faculty-issue': '/faculty/issue',
       'faculty-students': '/faculty/students',
+      'faculty-registry': '/faculty/registry',
       'faculty-revocation': '/faculty/revocation',
       'faculty-account': '/faculty/account',
       'verify': '/verify',
@@ -158,6 +160,7 @@ function AppContent() {
     '/faculty/dashboard': 'faculty-dashboard',
     '/faculty/issue': 'faculty-issue',
     '/faculty/students': 'faculty-students',
+    '/faculty/registry': 'faculty-registry',
     '/faculty/revocation': 'faculty-revocation',
     '/faculty/account': 'faculty-account',
   })[location.pathname] || '';
@@ -358,7 +361,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <RevocationPage />
+                  <RevocationPage initialNo={new URLSearchParams(location.search).get('no') || ''} />
                 </main>
               </>
             ) : (
@@ -382,6 +385,29 @@ function AppContent() {
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <StudentsPage />
+                </main>
+              </>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/faculty/registry"
+          element={
+            user?.role === 'faculty' ? (
+              <>
+                <TopNav
+                  role="faculty"
+                  view={currentView}
+                  onNavigate={handleNavigate}
+                  onSignOut={handleSignOut}
+                  userName={user.name}
+                  userTitle={user.title}
+                />
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                  <RegistryPage onOpenRevocation={no => navigate('/faculty/revocation?no=' + encodeURIComponent(no))} />
                 </main>
               </>
             ) : (

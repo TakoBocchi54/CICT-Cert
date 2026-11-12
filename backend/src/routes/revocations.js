@@ -25,6 +25,23 @@ router.get("/faculty/certificates/summary", async (_req, res) => {
   res.json({ ...counts.rows[0], recentIssued: issued.rows, recentRevoked: revoked.rows });
 });
 
+// Registry: certificates that reached the chain (issued or revoked), newest first.
+router.get("/faculty/certificates", async (req, res) => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 255) : "";
+  const statuses = ["ISSUED", "REVOKED"].includes(req.query.status) ? [req.query.status] : ["ISSUED", "REVOKED"];
+  // shortcut: newest 200 matches only, no paging; add paging when a search routinely returns more.
+  const { rows } = await pool.query(
+    `SELECT c."certificateNo", c."recipientName", c."seminarTitle", to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate",
+            c."certificateHash", c."status", c."issuedAt", c."revokedAt", u."email"
+     FROM certificate c JOIN student s ON s."studentID" = c."studentID" JOIN users u ON u."userID" = s."userID"
+     WHERE c."status" = ANY($1) AND ($2 = '' OR c."certificateNo"::text = $3 OR c."recipientName" ILIKE '%' || $2 || '%'
+       OR u."email" ILIKE '%' || $2 || '%' OR c."seminarTitle" ILIKE '%' || $2 || '%')
+     ORDER BY c."issuedAt" DESC, c."certificateNo" DESC LIMIT 200`,
+    [statuses, q.replace(/[\\%_]/g, "\\$&"), q.replace(/^#/, "")],
+  );
+  res.json(rows);
+});
+
 router.get("/faculty/certificates/:certificateNo", async (req, res) => {
   const certificate = await findCertificate(req.params.certificateNo);
   if (!certificate) return res.status(404).json({ error: "Certificate not found." });

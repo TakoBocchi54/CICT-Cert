@@ -11,6 +11,7 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
           ['faculty-dashboard', 'Dashboard'],
           ['faculty-issue', 'Seminars'],
           ['faculty-students', 'Students'],
+          ['faculty-registry', 'Registry'],
           ['faculty-revocation', 'Revocations'],
         ]
       : [

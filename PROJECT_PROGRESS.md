@@ -327,8 +327,18 @@ The mockup is the original prototype; global CSS and the login, student, revocat
   - `CertificatePreparation` takes `mode="approvals" | "issue"`. `GET /api/auth/faculty/me` now returns `autoIssue`. With it on, the Issue step shows "Issuing automatically", refreshes every 15 s and keeps "Issue now" as a fallback.
   - Checked with lint, build and a jsdom harness (step selection, rail clicks, draft surviving a remount). Not yet viewed in a real browser.
 - [ ] Custom faculty certificate templates (upload their own design): agreed as a separate feature after the wizard.
-- [ ] Step 2, public verifier restyle (hero, "Inspecting credential..." steps, colored result banner). Ask about the QR-scan tab first.
-- [ ] Step 3, faculty Registry page (new endpoint, route and nav item).
+- [x] **Step 2, public verifier restyle** (`pages/VerifierPortalPage.jsx`, 12 November). The request, hash validation and `detailsStatus` handling are unchanged.
+  - Centered hero with seal and the hash form in a `sheet tick-corners` card.
+  - The "Inspecting certificate…" screen lists the three checks together under one spinner (one request does all of them, so there is no fake timed ticking).
+  - A colored result banner (seal, rosette) is followed, **only when the stored details re-hash to the on-chain record**, by the rendered certificate (with its QR and stamp) plus an Inspection record panel. Otherwise only the Blockchain record panel and the existing warning are shown.
+  - The **QR-scan tab was skipped** (user's choice): phone camera apps already open `/verify?id=…`, and a scanner needs a new dependency.
+  - `Certificate.jsx` now hides "Block #" when no block number is given, instead of showing "Block #0".
+  - Checked with lint, build and a jsdom harness (Valid, Revoked, Mismatch and NotFound results, plus the idle form). Not yet viewed in a real browser.
+- [x] **Step 3, faculty Registry page** (`pages/RegistryPage.jsx`, `/faculty/registry`, nav item **Registry**, 12 November).
+  - `GET /api/faculty/certificates?q=&status=` (in `routes/revocations.js`) lists only certificates that reached the chain (`ISSUED`/`REVOKED`), newest issued first, first 200 matches (`shortcut:` comment, like the Students list). Search covers name, email, seminar title and exact certificate number.
+  - Status chips (All / Verified / Revoked), debounced search, and a **fixed-height table** (560 px, scrolls inside the card, sticky header), as the user asked.
+  - Each row has **Verify** (public verifier in a new tab) and **Revoke** / **Details**, which opens the Revocations page at `?no=<number>` with that certificate already looked up (`RevocationPage` takes `initialNo`).
+  - Test added to `revocation.test.js`; checked with lint, build and a jsdom harness. Not yet viewed in a real browser.
 - [ ] Step 4, certificate detail page.
 - [ ] Step 5, Share modal, only if the user wants it.
 
