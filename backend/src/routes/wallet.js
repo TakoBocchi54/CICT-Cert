@@ -5,17 +5,14 @@ import { getAddress, isAddress, verifyMessage } from "viem";
 import { pool } from "../db/pool.js";
 import { requireStudent } from "../middleware/requireStudent.js";
 import { secret } from "../utils/session.js";
+import { walletConsentMessage } from "../utils/certificateConsent.js";
 
 const router = Router();
 
 // Step 1: server creates the message the student must sign
 router.get("/wallet/nonce", requireStudent, async (req, res) => {
   const { studentID } = req.student;
-  const message =
-    `CICT-Cert wallet link\n` +
-    `Student ID: ${studentID}\n` +
-    `Nonce: ${randomBytes(16).toString("hex")}\n` +
-    `Issued at: ${new Date().toISOString()}`;
+  const message = walletConsentMessage(studentID, randomBytes(16).toString("hex"), new Date().toISOString());
 
   const challenge = await new SignJWT({ purpose: "wallet-link", message })
     .setProtectedHeader({ alg: "HS256" })
@@ -53,8 +50,9 @@ router.post("/wallet/link", requireStudent, async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO student_wallet ("studentID", "studentWalletAddress") VALUES ($1, $2)`,
-      [studentID, checksummed]
+      // The signed message is kept as evidence of the student's consent to receive certificates.
+      `INSERT INTO student_wallet ("studentID", "studentWalletAddress", "consentMessage", "consentSignature") VALUES ($1, $2, $3, $4)`,
+      [studentID, checksummed, message, signature]
     );
   } catch (err) {
     if (err.code === "23505") {

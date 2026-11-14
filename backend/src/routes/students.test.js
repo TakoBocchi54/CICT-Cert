@@ -35,7 +35,7 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
       ('faculty@example.test', 'FACULTY', 'x'), ('assistant@example.test', 'FACULTY', 'x'), ('existing@gmail.com', 'STUDENT', NULL);
     INSERT INTO cict_faculty ("userID", "firstName", "lastName", "canIssue") VALUES (1, 'Ana', 'Reyes', true), (2, 'Pedro', 'Cruz', false);
     INSERT INTO student ("userID", "fullName", "program") VALUES (3, 'Existing Student', 'BSCS');
-    INSERT INTO student_wallet ("studentID", "studentWalletAddress") VALUES (1, '0x1111111111111111111111111111111111111111');`);
+    INSERT INTO student_wallet ("studentID", "studentWalletAddress", "consentMessage", "consentSignature") VALUES (1, '0x1111111111111111111111111111111111111111', 'consent', '0xsig');`);
   const app = express();
   app.use(express.json({ limit: "2mb" }), cookieParser());
   app.use("/api", router);

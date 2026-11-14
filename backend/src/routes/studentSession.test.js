@@ -71,10 +71,12 @@ test("student login, session restoration and wallet linking keep the full CSV na
   const nonceResponse = await fetch(`${base}/wallet/nonce`, { headers: { Cookie: cookie } });
   assert.equal(nonceResponse.status, 200);
   const { message, challenge } = await nonceResponse.json();
+  assert.match(message, /agree to receive my CICT seminar certificates/);
   const signature = await account.signMessage({ message });
   queries.push((sql, params) => {
     assert.match(sql, /INSERT INTO student_wallet/);
-    assert.deepEqual(params, [profile.studentID, account.address]);
+    // The signed message is the student's standing consent, so it is stored with the wallet.
+    assert.deepEqual(params, [profile.studentID, account.address, message, signature]);
     return { rowCount: 1 };
   }, (sql, params) => {
     assert.match(sql, /s\."fullName"/);

@@ -1,6 +1,9 @@
 import { useParams } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
 import { Btn, Certificate, Seal } from '../components/design-system';
+import { api } from '../lib/api';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
+import { saveBlob } from '../lib/saveBlob';
 
 const STATUS_TEXT = {
   Verified: ['Valid and authentic', 'Issued on Polygon Amoy and confirmed in a finalized block.'],
@@ -18,6 +21,11 @@ const Row = ({ label, children, mono }) => (
 export default function StudentCertificatePage({ certificates, onBack, onDownload }) {
   const { certificateNo } = useParams();
   const cert = certificates.find(c => String(c.id) === certificateNo);
+  // The proof file lets anyone check this certificate against its batch root on chain without this site.
+  const proof = useMutation({
+    mutationFn: async () => saveBlob(new Blob([JSON.stringify(await api(`/api/student/certificates/${cert.certificateID}/proof`), null, 2)],
+      { type: 'application/json' }), `CICT-Certificate-${cert.id}-proof.json`),
+  });
 
   const back = (
     <button type="button" onClick={onBack}
@@ -47,7 +55,11 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
       <div className="grid items-start gap-8 lg:grid-cols-12">
         <div className="rise lg:col-span-8">
           <Certificate cert={cert} tilt={false} verificationUrl={certificateVerificationUrl(cert.hash, window.location.origin)} />
-          <Btn className="mt-5" icon="ph-download-simple" onClick={() => onDownload(cert)}>Download PDF</Btn>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Btn icon="ph-download-simple" onClick={() => onDownload(cert)}>Download PDF</Btn>
+            <Btn variant="line" icon="ph-tree-structure" disabled={proof.isPending} onClick={() => proof.mutate()}>{proof.isPending ? 'Preparing proof...' : 'Download Merkle proof (JSON)'}</Btn>
+          </div>
+          {proof.error && <p role="alert" className="mt-3 text-sm text-revoked">{proof.error.message}</p>}
         </div>
         <aside className="rise space-y-6 lg:col-span-4" style={{ '--d': '.1s' }}>
           <section className="sheet p-7 text-center">

@@ -1,14 +1,14 @@
 # CICT-Cert: Project context, progress, and next steps
 
-Updated: **12 November 2026 (Asia/Manila)**: student accounts are now separate from seminars (Students tab; attendance matched against all accounts, with a guarded "register them?" prompt), and the 4-step wizard tab is now called **Issue**, next to a read-only **Seminars** tab. Earlier: revocation, replacement, optional auto-issuance, real faculty dashboard data and a test-data reset script. See section 10 for where to resume.
+Updated: **15 November 2026 (Asia/Manila)**: Merkle batch issuance and sparse Merkle tree batch revocation replace per-certificate approval, issuance and revocation (new contract, not yet deployed; see "Done (15 November)" in section 4). Earlier, 12 November: student accounts are now separate from seminars (Students tab; attendance matched against all accounts, with a guarded "register them?" prompt), and the 4-step wizard tab is now called **Issue**, next to a read-only **Seminars** tab. Earlier: revocation, replacement, optional auto-issuance, real faculty dashboard data and a test-data reset script. See section 10 for where to resume.
 
 This is a handoff for continuing the project. It records the agreed scope, the implementation currently in the workspace, checks completed during development, known gaps, and the recommended next task. Working locally does not mean the same changes are already deployed.
 
 ## 1. Project context
 
-CICT-Cert is a seminar certificate system for the College of Information and Communications Technology at the University of Batangas. Faculty register students, confirm seminar attendance, and issue blockchain-backed certificates. Students sign in through their Google account, connect an embedded wallet, approve receipt of their certificates, and download them as PDFs. Anyone can verify a certificate without logging in.
+CICT-Cert is a seminar certificate system for the College of Information and Communications Technology at the University of Batangas. Faculty register students, confirm seminar attendance, and issue blockchain-backed certificates. Students sign in through their Google account, connect an embedded wallet (signing a one-time consent to receive certificates), and download them as PDFs. Anyone can verify a certificate without logging in.
 
-The blockchain provides a persistent issuance and revocation record. PostgreSQL stores accounts, seminar registrations, attendance, certificate details, recipient consent, and transaction history. The PDF is the presentation of a certificate; verification reads the current blockchain status.
+The blockchain provides a persistent issuance and revocation record. PostgreSQL stores accounts, seminar registrations, attendance, certificate details, wallet-link consent, and transaction history. The PDF is the presentation of a certificate; verification reads the current blockchain status.
 
 ### Agreed technology
 
@@ -39,21 +39,22 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 
 - Use **ERC-5484**, replacing the earlier ERC-5192 idea.
 - Certificates are soulbound: students cannot transfer them or approve transfers.
-- Burn authorization is **IssuerOnly**. Only the configured issuer may revoke a token.
+- Burn authorization is **Neither** (15 November; was IssuerOnly): nobody burns a token. Only the configured issuer may revoke, by updating the on-chain sparse Merkle revocation root.
+- Issuance is batched: one transaction per batch stores an immutable Merkle root (linked to the seminar) and mints one token per certificate. Revocation is batched through the single revocation root. Tokens are never burned.
 - The contract has one immutable issuer address, without ownership transfer or multiple issuer roles.
 - Keep Solidity source pragma `^0.8.24`. This is a compatible compiler range, not an exact compiler pin. The current Hardhat configuration selects compiler **0.8.34** and EVM target `cancun`.
 - Use the guide `blockchain-smart-contract-guide.md` as background, adjusted to the actual repository and later decisions. Its sample counts, paths, optional functions, and older recommendations are not proof of implemented behavior.
 - Students are **accounts**, registered in the Students tab (bulk CSV or one at a time) or from the attendance preview; registering a Google account is what lets a student sign in. There is no per-seminar sign-up list. After each seminar, import its final attendance list, which is matched against all student accounts (12 November; replaces "import seminar registrations before the seminar").
 - Attendance/eligibility calculation is outside scope. The final attendance CSV determines recipients.
 - Match registrations and attendance using the **Google account email**. Do not match using names or school student numbers.
-- Students without a linked wallet can remain pending. They are issued certificates only after wallet setup, certificate-specific approval, and faculty confirmation.
-- Issuance is never triggered by login or wallet connection. It is triggered by a faculty button, or, with `AUTO_ISSUE=true` (implemented 11 November, untested on Amoy), by a background worker after the student's certificate-specific approval. See `backend/README.md`.
+- Students without a linked wallet can remain pending. They are issued certificates only after wallet setup and faculty confirmation. Linking the wallet is the student's standing consent; there is no per-certificate approval (15 November).
+- Issuance is never triggered by login or wallet connection. It is triggered only by a faculty button after reviewing the list. Auto-issuance was removed on 15 November.
 - Certificate details are recipient name, seminar title, seminar date, and an automatically generated numeric certificate number.
 - Use the portal/PDF presentation approach. Rich certificate artwork/metadata in external wallets is deferred.
 - A corrected issued certificate requires revoking the original and issuing a new certificate number. The explicit replacement workflow is implemented (10 November).
 - Corrected facts (recipient name, seminar title, seminar date) are **entered by faculty on the replacement** and saved only on that new certificate. Student profiles and seminar records are not edited by this workflow (chosen over adding profile/seminar editing).
 - The revocation reason is stored in PostgreSQL (`blockchain_record.revocationReason`), not on-chain.
-- Retain certificate snapshots of recipient name and seminar details, even though the certificate also references its seminar. They preserve the facts approved and issued at that time.
+- Retain certificate snapshots of recipient name and seminar details, even though the certificate also references its seminar. They preserve the facts issued at that time.
 - Keep `seminar.createdBy`; it comes from the signed-in faculty account.
 - Do not store section or school student number for this workflow.
 - Do not keep `certificate.createdAt`, `replacesCertificateID`, or a database `failureReason` field. Keep `certificate.issuedAt` and `revokedAt`.
@@ -63,16 +64,16 @@ The blockchain provides a persistent issuance and revocation record. PostgreSQL 
 
 1. **Faculty creates a seminar** with title and date. The backend records the faculty creator.
 2. **Faculty registers students** in the Students tab (bulk CSV or one at a time). This creates the account their Google sign-in needs.
-3. **Students sign in with the registered Google account** and link their embedded wallet by signing a server-provided message.
+3. **Students sign in with the registered Google account** and link their embedded wallet by signing a server-provided message, which also records their consent to receive certificates.
 4. **Faculty imports final attendance**, reviews matches (registering any unknown attendees from the preview, with typo suggestions), then confirms the full list. Confirming creates the seminar's attendance rows.
 5. **Faculty prepares pending certificates.** Each attendee receives a numbered certificate snapshot; missing wallets remain pending.
-6. **Students review and approve their individual certificates** with their linked wallet. This approval is distinct from wallet linking.
-7. **Faculty reviews and confirms issuance on Amoy.** The backend validates, signs, submits, and reconciles transactions.
+6. **Faculty reviews the printed names** (and corrects any before issuance); students see the same names read-only in their portal.
+7. **Faculty confirms issuance on Amoy.** All ready certificates go out in Merkle batches (one transaction each). The backend validates, signs, submits, and reconciles them.
 8. **Students see issued certificates** on the dashboard and in their collection.
 9. **Students download a certificate PDF** containing the design, certificate hash, and verification QR.
 10. **Anyone verifies publicly**, using the QR/hash, or reads the contract through the block explorer.
-11. **Faculty revokes an issued certificate** from the Registry tab: a row's **Revoke** opens the revocation page for that certificate, which needs a reason. The backend signs, broadcasts and reconciles `revoke(tokenId)` and marks the certificate `REVOKED` only after finality.
-12. **Faculty prepares a replacement** for a revoked certificate with corrected facts and a new number. The student approves it, and faculty issue it through step 7.
+11. **Faculty revokes an issued certificate** from the Registry tab: a row's **Revoke** opens the revocation page for that certificate, which needs a reason, or ticks several rows and revokes them in one transaction. The backend signs, broadcasts and reconciles `revokeBatch(newRoot, tokenIds)` and marks certificates `REVOKED` only after finality.
+12. **Faculty prepares a replacement** for a revoked certificate with corrected facts and a new number. Faculty issue it through step 7, in a new batch.
 
 The user confirmed successful local registration/attendance work, student-related flows, real Amoy issuance, and PDF download during development. Public metadata and the latest layout fixes were also checked with isolated browser tests. On 10 November the user confirmed a real Amoy revocation through the new portal flow (certificate No. 1, reason "Revocation test"). The replacement flow has not yet been tried manually.
 
@@ -422,6 +423,15 @@ Faculty can design certificates instead of always using the built-in layout. The
 - The revocation page (`/faculty/revocation?no=<number>`) is still the place to revoke, check a pending revoke transaction or prepare a replacement. It's opened from a Registry row's **Revoke** / **Details**, keeps the Registry tab highlighted, and has a **Back to registry** link.
 - The dashboard's "View revoked certificates" button opens the Registry with the Revoked filter (`?status=REVOKED`).
 
+### Done (15 November): Merkle batch issuance and sparse Merkle revocation
+
+**Supersedes** per-certificate student approval, one-transaction-per-certificate issuance and revocation, burning on revoke, and auto-issuance (11 November). Older entries above describe the previous design. Not yet deployed to Amoy; nothing committed. The authoritative spec is `backend/README.md` ("Merkle batch issuance and sparse Merkle revocation").
+
+- **Contract** (`CICTCertificate.sol`, rewritten; constructor and deploy script unchanged): `issueBatch(seminarId, root, recipients, certHashes)` stores an immutable Merkle root per batch (linked to the seminar) and mints one soulbound token each; each token stores only its batch ID. `revokeBatch(newRoot, tokenIds)` replaces one sparse-Merkle-tree revocation root (depth 64, keyed by token ID); tokens are not burned. `verify(tokenId, certHash, merkleProof, smtBitmap, smtSiblings)` returns Valid/Revoked/NotFound. `burnAuth` is now `Neither`. `BatchIssued` emits the batch's hashes so trees can be rebuilt from the chain.
+- **Benchmarks** (`contracts/bench/Benchmarks.sol`, `test/GasBenchmark.ts`): batch of 100 costs 74,871 gas per certificate vs 100,805 for one transaction each with a stored hash (26% less). Dropping the per-token batch-ID slot would give about 48% but `verify` would then need the batch ID passed in; **left as specified, user to decide**. Revoking 1,000: SMT 459k gas, bitmap 1.0M, burn 8.5M, mapping 22.8M. Proofs: 4 hashes (128 bytes) for a batch of 100; compressed SMT proof 8 to 328 bytes vs 2,048 uncompressed.
+- **Backend:** `utils/merkle.js` (viem only); migration `007_merkle_batches.sql` (consent moves to `student_wallet`, per-certificate consent columns removed, `transactionHash` non-unique); canonical hash version 2; wallet-link message now carries the consent; batch issue/check routes (`ISSUE_BATCH_SIZE`, default 100, 1 to 200); batch revoke/check routes (max 200); pre-issuance name correction (`PATCH .../certificates/:certificateID`); student proof download (`GET /api/student/certificates/:certificateID/proof`); verifier rebuilds both proofs and calls `verify`. Auto-issuance and the consent routes removed. 110 backend tests pass against local PostgreSQL; 8 contract tests pass.
+- **Frontend:** wizard steps are Seminar, Attendance, **Review**, Issue. Review lists the printed names with a **Correct name** control; Issue sends all ready certificates in batches with one confirmation and a seminar-level **Check transaction**. Students get a read-only **Upcoming certificates** card instead of approvals, and a **Download Merkle proof (JSON)** button on a certificate's page. The Registry has checkboxes and **Revoke N** for batch revocation. The verifier shows the batch number. Lint (6 errors, all pre-existing in `useStudentSession.js` and `LoginPage.jsx`), build and the frontend tests pass. **Not tried in a browser.**
+
 ## 5. Certificate hash, statuses, and explorer context
 
 The certificate hash is **Keccak-256 of a canonical data object**, not a hash of the PDF file. `backend/src/utils/certificateConsent.js` defines the exact encoding and field order:
@@ -431,7 +441,7 @@ version, chainId, contractAddress, issuerAddress, certificateNo,
 recipient, recipientName, seminarTitle, seminarDate, burnAuth
 ```
 
-Version is `1`; certificate number is a decimal string; addresses are lowercase; date is `YYYY-MM-DD`; burn authorization is `IssuerOnly`. Do not change this encoding casually: existing approvals and issued hashes depend on it.
+Version is `2` (15 November; was `1`); certificate number is a decimal string; addresses are lowercase; date is `YYYY-MM-DD`; burn authorization is `Neither` (was `IssuerOnly`). Do not change this encoding casually: issued hashes depend on it.
 
 | Context | Values |
 | --- | --- |
@@ -442,9 +452,9 @@ Version is `1`; certificate number is a decimal string; addresses are lowercase;
 
 Do not confuse certificate number, blockchain token ID, certificate hash, contract address, and transaction hash. They identify different things.
 
-To check a certificate in the explorer, open the configured contract, choose **Contract -> Read Contract -> verify**, paste the certificate hash once with a single `0x` prefix, and query. Read `issuer()` separately for the issuing wallet. The contract does not store readable recipient names or seminar titles.
+To check a certificate in the explorer, open the configured contract, choose **Contract -> Read Contract -> verify**, and enter the token ID, the certificate hash and the two proofs (the student's proof file has the inclusion proof; the revocation proof comes from the backend). `batchOf(recordOf(tokenId).batchId)` shows the batch root. Read `issuer()` separately for the issuing wallet. The contract does not store readable recipient names or seminar titles.
 
-In an issuance transaction, **From** is the issuer wallet and **To** is the certificate contract. The student wallet is the `to` argument to `issue()` and the mint recipient in its transfer event. Successful transaction status proves that transaction succeeded; `verify()` checks the current valid/revoked state.
+In an issuance transaction, **From** is the issuer wallet and **To** is the certificate contract. Student wallets are the `recipients` argument to `issueBatch()` and the mint recipients in its transfer events. Successful transaction status proves that transaction succeeded; `verify()` checks the current valid/revoked state.
 
 The public portal confirms saved certificate facts against the chain. It does not upload and automatically inspect an arbitrary PDF. A verifier must compare the portal's facts with the document received; copying a valid QR onto an altered PDF does not make the altered text authentic.
 
@@ -454,7 +464,7 @@ The public portal confirms saved certificate facts against the chain. It does no
 
 - [x] 10 November work (revocation and replacement) committed by the user.
 - [x] Auto-issuance, the key fix, the reset script, the dashboard summary and the Share removal are committed. Only this file's 11 November update is uncommitted.
-- [ ] Confirm on real Amoy: auto-issuance (approve as a student with `AUTO_ISSUE=true`, wait about 30 s) and the replacement flow (revoke, prepare replacement, approve, issue, check `/verify` and the "Replaced by" label). The user did a round of three-Google-account testing on 11 November; the outcome of these two checks was not recorded.
+- [ ] ~~Auto-issuance check~~ (removed 15 November). Confirm on real Amoy the replacement flow (revoke, prepare replacement, approve, issue, check `/verify` and the "Replaced by" label). The user did a round of three-Google-account testing on 11 November; the outcome of these two checks was not recorded.
 - [ ] No browser automation has run on the Revocations page or the replacement dialog.
 
 ### Priority 1: real faculty revocation (done 10 November)
@@ -471,9 +481,15 @@ The public portal confirms saved certificate facts against the chain. It does no
 - [x] Old certificate and transaction history preserved; no replacement-link field was added.
 - [x] Ordinary repeated preparation still never creates replacements; the existing test for this still passes.
 
-### Auto-issuance on student approval (done 11 November, pending real-Amoy check)
+### Auto-issuance on student approval (removed 15 November)
 
-Implemented as designed; see section 4. Accepted trade-offs: no faculty review right before minting (the student's approval is the last check), a sleeping host mints only once awakened, missing POL leaves approvals waiting, and mints are one at a time (each waits for finality).
+Removed with the per-certificate approval it depended on; faculty now review the list and issue in batches.
+
+### Merkle batch issuance and SMT revocation (done 15 November, not deployed)
+
+- [ ] Decide whether to drop the per-token batch-ID slot (about 48% issuance saving instead of 26%; `verify` would take the batch ID as an argument).
+- [ ] Try the new UI in a browser: Review step and name correction, batch Issue, Upcoming certificates, proof download, Registry batch revoke.
+- [ ] Deploy and run end to end on Amoy (see section 10).
 
 ### Priority 3: connect remaining faculty certificate views and sharing
 
@@ -489,7 +505,7 @@ Implemented as designed; see section 4. Accepted trade-offs: no faculty review r
 - [ ] Confirm whether an actual coordinator signature/name or other final artwork changes are required; the current coordinator area is a design placeholder.
 - [x] `App.jsx` lint findings resolved. The project-wide lint baseline has not been re-checked.
 - [ ] Review existing build warnings: CSS font import order and large bundles. Builds pass, but these warnings remain.
-- [ ] Update the template root/Hardhat READMEs and stale early paragraphs in the backend README. In particular, older paragraphs still call already-implemented consent/issuance/PDF work future work and mention migration 001-004, while the runner now includes 005.
+- [x] Backend README stale paragraphs and migration list updated (15 November). The template root/Hardhat READMEs are still unchanged.
 - [ ] **Fresh contract and clean data before going live:** deploy a new contract (`npx hardhat run scripts/deploy.ts --network amoy`, spends test POL) and set `CONTRACT_ADDRESS`. Then reset the test data (`node scripts/resetTestData.js`, then `--yes`) on the right database after a backup. Do the deploy before the reset: certificate hashes include the contract address. Old test mints stay on the old contract permanently.
 - [ ] Back up and migrate the deployed database through the required changes, checking its existing history and original timestamp timezone first.
 - [ ] Deploy frontend/backend together and verify their API routing, HTTPS cookies, CORS, Web3Auth configuration, public `/verify` deep links, and contract/RPC settings in the actual hosting arrangement.
@@ -597,7 +613,7 @@ SESSION_SECRET
 AMOY_RPC_URL
 CONTRACT_ADDRESS
 ISSUER_PRIVATE_KEY
-AUTO_ISSUE   (optional; "true" enables auto-issuance)
+ISSUE_BATCH_SIZE   (optional; certificates per issuance transaction, default 100, 1 to 200)
 ```
 
 Frontend `.env`: `VITE_WEB3AUTH_CLIENT_ID`.
@@ -611,13 +627,13 @@ Keep `.env`, issuer private keys, passwords, cookie values, identity tokens, con
 1. Explain that student identity, certificate presentation, and blockchain verification are separate parts of the system.
 2. Sign in as authorized faculty. Show the Students tab and explain that registering a Google account only enables sign-in; it is not attendance or issuance.
 3. Show the final attendance preview and confirmation.
-4. Prepare pending certificates. Point out a recipient waiting for wallet setup versus one awaiting approval.
-5. Sign in as a registered student, show the linked wallet, and review/approve a specific certificate.
-6. Return to faculty, review issuance, and explicitly confirm one test certificate if a live mint is intended. Show its transaction link/token ID.
+4. Prepare pending certificates. Point out a recipient waiting for wallet setup versus one ready to issue, and correct a name in the Review step.
+5. Sign in as a registered student, show the linked wallet and the read-only Upcoming certificates card with their printed name.
+6. Return to faculty and issue the batch if a live mint is intended. Show its single transaction link and the token IDs.
 7. Show the student's dashboard/collection, full hash, and PDF download with the QR beside the seal.
 8. Open public verification in a logged-out browser. Show the recipient/seminar/number and matching blockchain details.
-9. Optionally query `verify(certHash)` in the explorer; explain numeric status and contract address versus student recipient.
-10. Optionally revoke a test certificate from the Registry (row **Revoke**) with a reason, check the transaction until finalized, and show the public verifier reporting Revoked. Then prepare a replacement with corrected details and a new number.
+9. Optionally download the Merkle proof file from the student's certificate page and explain the batch root, the inclusion proof and the revocation root.
+10. Optionally revoke test certificates from the Registry (tick rows, **Revoke N**, one transaction) with a reason, check the transaction until finalized, and show the public verifier reporting Revoked. Then prepare a replacement with corrected details and a new number.
 
 Use a deployed frontend for a QR demonstration across devices. Avoid creating extra live transactions merely to demonstrate already-issued certificates.
 
@@ -625,9 +641,11 @@ Use a deployed frontend for a QR demonstration across devices. Avoid creating ex
 
 Resume in this order:
 
-1. **Commit** the student-accounts work (12 November), then try it in a real browser: register a student in the Students tab, upload an attendance CSV with one unknown email and one typo, use the prompt, confirm, and check the dashboard hero.
-2. **Confirm auto-issuance and the replacement flow on real Amoy** (see Priority 0). Fix anything that fails before moving on.
-3. **Release preparation**, in this order: deploy a fresh contract and update `CONTRACT_ADDRESS` (and the ABI if the interface changed); back up, then run the reset script and migrate Supabase; deploy frontend and backend together; run one full test on the deployed portal; generate shared PDFs from the deployed frontend.
-4. Priority 4 polish as time allows: small screens, keyboard navigation, longer names, the coordinator signature placeholder, the stale README paragraphs and the bundle-size warnings.
+1. **Review and commit** the 15 November Merkle batch work (contract, backend, frontend, docs). Nothing is committed yet.
+2. **Decide** the per-token batch-ID question (section 6). Changing it means a contract, backend and test change before deploying.
+3. **Deploy and reset** (spends Amoy POL and wipes test data; do it yourself): back up the database, `node scripts/resetTestData.js --yes`, `node scripts/migrateSeminarSchema.js "<original TZ>"` (or apply `007_merkle_batches.sql` alone on an already migrated database), `npx hardhat run scripts/deploy.ts --network amoy` in `smart_contract`, set `CONTRACT_ADDRESS`, restart the backend.
+4. **Manual run with three test Google accounts:** sign in (wallet links with consent), import attendance, review and correct a name, issue the batch, open `/verify` for each, download a proof file, revoke two in one transaction from the Registry, confirm Revoked for those and Valid for the third, then prepare and issue a replacement as a second batch.
+5. **Release preparation**: migrate Supabase after a backup; deploy frontend and backend together; run one full test on the deployed portal; generate shared PDFs from the deployed frontend.
+6. Priority 4 polish as time allows.
 
 Rough progress estimate (11 November, judgment, not measured): smart contract ~95%, backend ~90%, frontend ~80%, release/ops ~15%, overall ~90% feature-complete and ~70% release-ready.

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { pool } from "../db/pool.js";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { certificateIssuer } from "../services/certificates.js";
-import { ensureIssuerWallet, issueCertificate, IssuanceError } from "../services/issuance.js";
+import { ensureIssuerWallet, issueSeminarBatch, IssuanceError } from "../services/issuance.js";
+import { correctRecipientName } from "../services/revocation.js";
 import { readAttendanceCsv, googleEmail, CsvError } from "../utils/seminarCsv.js";
 
 const router = Router();
@@ -17,15 +18,16 @@ router.param("seminarID", (req, res, next, value) => {
 });
 
 router.get("/faculty/seminars", async (_req, res) => {
-  // readyCount: approved, not yet issued; awaitingCount: prepared, waiting for the student's approval.
+  // readyCount: wallet linked, not yet issued; awaitingCount: prepared, waiting for the student to link a wallet.
   const { rows } = await pool.query(`
     WITH certs AS (
       SELECT c."seminarID",
-             count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NOT NULL AND c.status IN ('PENDING', 'FAILED'))::int AS "readyCount",
-             count(*) FILTER (WHERE cr."attended" AND c."consentedAt" IS NULL AND c.status = 'PENDING')::int AS "awaitingCount",
+             count(*) FILTER (WHERE cr."attended" AND cw."studentWalletID" IS NOT NULL AND c.status IN ('PENDING', 'FAILED'))::int AS "readyCount",
+             count(*) FILTER (WHERE cr."attended" AND cw."studentWalletID" IS NULL AND c.status IN ('PENDING', 'FAILED'))::int AS "awaitingCount",
              count(*) FILTER (WHERE c.status = 'ISSUED')::int AS "issuedCount",
              count(*)::int AS "certificateCount"
-      FROM certificate c JOIN seminar_registration cr USING ("seminarID", "studentID") GROUP BY c."seminarID")
+      FROM certificate c JOIN seminar_registration cr USING ("seminarID", "studentID")
+      LEFT JOIN student_wallet cw ON cw."studentID" = c."studentID" GROUP BY c."seminarID")
     SELECT s."seminarID", s."seminarTitle", to_char(s."seminarDate", 'YYYY-MM-DD') AS "seminarDate", s."createdBy",
            s."templateID"::text AS "templateID", t."name" AS "templateName",
            count(r."studentID")::int AS "registrationCount",
@@ -279,7 +281,7 @@ router.get("/faculty/seminars/:seminarID/certificates", async (req, res) => {
   const seminar = await pool.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1`, [req.params.seminarID]);
   if (!seminar.rowCount) return res.status(404).json({ error: "Seminar not found." });
   const { rows } = await pool.query(
-    `SELECT c."certificateID", c."certificateNo", c."recipientName", c."status", c."consentedAt",
+    `SELECT c."certificateID", c."certificateNo", c."recipientName", c."status",
             r."attended", u."email", (w."studentWalletID" IS NOT NULL) AS "walletConnected",
             b."transactionStatus", b."transactionHash", b."tokenID", c."certificateHash"
      FROM certificate c JOIN seminar_registration r USING ("seminarID", "studentID")
@@ -335,11 +337,17 @@ router.post("/faculty/seminars/:seminarID/certificates/prepare", requireCanIssue
   } finally { client.release(); }
 });
 
-router.post(["/faculty/seminars/:seminarID/certificates/:certificateID/issue",
-  "/faculty/seminars/:seminarID/certificates/:certificateID/issuance/check"], requireCanIssue, async (req, res) => {
+// /issue may sign the seminar's next batch; /issuance/check only reconciles or rebroadcasts the pending one.
+router.post(["/faculty/seminars/:seminarID/certificates/issue", "/faculty/seminars/:seminarID/certificates/issuance/check"],
+  requireCanIssue, async (req, res) => {
+    res.json(await issueSeminarBatch(req.params.seminarID, req.faculty, req.path.endsWith("/issue")));
+  });
+
+// Name correction before issuance.
+router.patch("/faculty/seminars/:seminarID/certificates/:certificateID", requireCanIssue, async (req, res) => {
   const id = req.params.certificateID;
   if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.status(400).json({ error: "Invalid certificate ID." });
-  res.json(await issueCertificate(req.params.seminarID, id, req.faculty, req.path.endsWith("/issue")));
+  res.json(await correctRecipientName(req.params.seminarID, id, req.body));
 });
 
 router.use((err, _req, res, next) => {

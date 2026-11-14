@@ -111,7 +111,7 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
         ? <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
           {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
         </Btn>
-        : <Btn variant="line" iconRight="ph-arrow-right" onClick={onContinue}>Continue to Approvals</Btn>, actionSlot)}
+        : <Btn variant="line" iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>, actionSlot)}
     </div>
   );
 }

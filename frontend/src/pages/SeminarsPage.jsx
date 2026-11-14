@@ -67,8 +67,7 @@ const progressLook = row =>
     : !row.attended ? ['neutral', 'ph-pause-circle']
     : !row.walletConnected ? ['neutral', 'ph-wallet']
     : row.status === 'FAILED' ? ['danger', 'ph-arrow-clockwise']
-    : row.consentedAt ? ['pending', 'ph-check-circle']
-    : ['neutral', 'ph-signature'];
+    : ['pending', 'ph-check-circle'];
 
 const SectionHead = ({ id, icon, title, count }) => (
   <div className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-4">
@@ -207,7 +206,7 @@ export default function SeminarsPage() {
 const STATS = [
   ['Attended', 'attendanceCount', 'ph-users-three'],
   ['With wallet', 'walletCount', 'ph-wallet'],
-  ['Awaiting approval', 'awaitingCount', 'ph-signature'],
+  ['Awaiting wallet', 'awaitingCount', 'ph-hourglass-medium'],
   ['Ready to issue', 'readyCount', 'ph-stamp'],
   ['Issued', 'issuedCount', 'ph-seal-check'],
 ];

@@ -39,6 +39,10 @@ CREATE TABLE student_wallet (
     "studentWalletID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "studentID" BIGINT NOT NULL UNIQUE,
     "studentWalletAddress" VARCHAR(42) NOT NULL UNIQUE,
+    -- The wallet-link message the student signed. It carries their standing consent to receive
+    -- certificates at this wallet; "createdAt" is when it was given.
+    "consentMessage" TEXT NOT NULL CHECK (btrim("consentMessage") <> ''),
+    "consentSignature" TEXT NOT NULL CHECK (btrim("consentSignature") <> ''),
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_student_wallet_student
         FOREIGN KEY ("studentID")
@@ -111,9 +115,6 @@ CREATE TABLE certificate (
     "seminarDate" DATE NOT NULL,
     "certificateHash" VARCHAR(66),
     "seminarID" BIGINT NOT NULL,
-    "consentMessage" TEXT,
-    "consentSignature" TEXT,
-    "consentedAt" TIMESTAMPTZ,
     "status" VARCHAR(20) NOT NULL DEFAULT 'PENDING'
         CHECK ("status" IN ('PENDING', 'ISSUED', 'REVOKED', 'FAILED')),
     "issuedAt" TIMESTAMPTZ,
@@ -140,7 +141,9 @@ CREATE TABLE blockchain_record (
     "certificateID" BIGINT NOT NULL,
     "transactionType" VARCHAR(10) NOT NULL
         CHECK ("transactionType" IN ('MINT', 'REVOKE')),
-    "transactionHash" VARCHAR(66) UNIQUE,
+    -- One row per certificate: every row of a batch carries the same transaction hash.
+    "transactionHash" VARCHAR(66),
+    -- Saved on the batch's first row only (lowest "transactionID").
     "signedTransaction" TEXT,
     "requestedBy" BIGINT NOT NULL,
     "revocationReason" TEXT,
@@ -174,6 +177,9 @@ CREATE INDEX IF NOT EXISTS idx_certificate_issuer_wallet_id
 CREATE INDEX IF NOT EXISTS idx_blockchain_record_certificate_id
     ON blockchain_record ("certificateID");
 
+CREATE INDEX IF NOT EXISTS idx_blockchain_record_transaction_hash
+    ON blockchain_record ("transactionHash");
+
 ALTER SEQUENCE certificate_number_seq OWNED BY certificate."certificateNo";
 
 ALTER TABLE users ADD CONSTRAINT chk_normalized_email
@@ -194,17 +200,12 @@ ALTER TABLE certificate
         CHECK (btrim("recipientName") <> '' AND btrim("seminarTitle") <> ''),
     ADD CONSTRAINT uq_certificate_hash UNIQUE ("certificateHash"),
     ADD CONSTRAINT chk_certificate_hash CHECK ("certificateHash" ~ '^0x[0-9a-f]{64}$'),
-    ADD CONSTRAINT chk_certificate_consent CHECK (
-        ("consentMessage" IS NULL AND "consentSignature" IS NULL AND "consentedAt" IS NULL)
-        OR ("consentMessage" IS NOT NULL AND btrim("consentMessage") <> ''
-            AND "consentSignature" IS NOT NULL AND btrim("consentSignature") <> ''
-            AND "consentedAt" IS NOT NULL AND "studentWalletID" IS NOT NULL AND "certificateHash" IS NOT NULL)
-    ),
+    -- The hash covers the recipient wallet, so it cannot exist without one.
+    ADD CONSTRAINT chk_certificate_hash_wallet CHECK ("certificateHash" IS NULL OR "studentWalletID" IS NOT NULL),
     ADD CONSTRAINT chk_certificate_issuance CHECK (
         ("status" IN ('PENDING', 'FAILED') AND "issuedAt" IS NULL)
         OR ("status" IN ('ISSUED', 'REVOKED') AND "studentWalletID" IS NOT NULL
-            AND "certificateHash" IS NOT NULL AND "authorizedBy" IS NOT NULL
-            AND "consentedAt" IS NOT NULL AND "issuedAt" IS NOT NULL AND "issuedAt" >= "consentedAt")
+            AND "certificateHash" IS NOT NULL AND "authorizedBy" IS NOT NULL AND "issuedAt" IS NOT NULL)
     ),
     ADD CONSTRAINT chk_certificate_revocation CHECK (
         ("status" = 'REVOKED' AND "revokedAt" IS NOT NULL AND "revokedAt" >= "issuedAt")
@@ -245,13 +246,14 @@ BEGIN
                OR (NEW."status" = 'ISSUED' AND NEW."revokedAt" IS DISTINCT FROM OLD."revokedAt") THEN
                 RAISE EXCEPTION 'Issued certificate details are immutable; revoke and replace it';
             END IF;
-        ELSIF OLD."consentedAt" IS NOT NULL AND NEW."consentedAt" IS NOT NULL
+        -- The hash is set when the batch transaction is signed; from then on the hashed facts are frozen.
+        ELSIF OLD."certificateHash" IS NOT NULL AND NEW."certificateHash" IS NOT NULL
             AND (NEW."certificateNo", NEW."studentID", NEW."seminarID", NEW."studentWalletID", NEW."issuerWalletID",
                  NEW."recipientName", NEW."seminarTitle", NEW."seminarDate", NEW."certificateHash")
                 IS DISTINCT FROM
                 (OLD."certificateNo", OLD."studentID", OLD."seminarID", OLD."studentWalletID", OLD."issuerWalletID",
                  OLD."recipientName", OLD."seminarTitle", OLD."seminarDate", OLD."certificateHash") THEN
-            RAISE EXCEPTION 'Clear the previous consent before changing certificate details';
+            RAISE EXCEPTION 'Clear the certificate hash before changing certificate details';
         END IF;
     END IF;
 

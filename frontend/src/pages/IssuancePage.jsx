@@ -12,7 +12,7 @@ import TemplatePicker from '../components/TemplatePicker';
 const fmt = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
 // Students are registered in the Students tab; a seminar's attendees come from its attendance list.
-const STEPS = ['Seminar', 'Attendance', 'Approvals', 'Issue'];
+const STEPS = ['Seminar', 'Attendance', 'Review', 'Issue'];
 
 // Whether a seminar has finished each step, from the counts in GET /api/faculty/seminars.
 function stepDone(seminar, index) {
@@ -31,7 +31,7 @@ function stepHint(seminar, index) {
   return [
     seminar.seminarTitle,
     seminar.attendanceCount ? `${seminar.attendanceCount} attended` : 'Final attendee list',
-    seminar.awaitingCount ? `${seminar.awaitingCount} awaiting approval` : 'Students approve',
+    seminar.awaitingCount ? `${seminar.awaitingCount} awaiting wallet` : 'Check the names',
     seminar.attendanceCount ? `${seminar.issuedCount} of ${seminar.attendanceCount} issued` : 'Mint on Polygon',
   ][index];
 }
@@ -52,8 +52,6 @@ export default function IssuancePage({ onNavigateRegistry }) {
     queryFn: () => api('/api/faculty/seminars'),
     retry: false,
     refetchOnWindowFocus: false,
-    // Keep the rail counts current while auto-issuance mints in the background.
-    refetchInterval: step === 3 && faculty.data?.autoIssue ? 15_000 : false,
   });
   const selected = seminars.data?.find(seminar => seminar.seminarID === selectedId);
   // Open each seminar at its first unfinished step, once; after that the faculty member drives navigation.
@@ -152,7 +150,7 @@ export default function IssuancePage({ onNavigateRegistry }) {
                   {attendanceResult.prepared && ` ${attendanceResult.prepared.prepared} certificates prepared; ${attendanceResult.prepared.awaitingWallet} attendees still need a wallet.`}
                   {attendanceResult.prepareError && <span className="block text-revoked">Certificates were not prepared: {attendanceResult.prepareError} Use Prepare certificates below.</span>}
                 </div>}
-                <CertificatePreparation mode="approvals" seminarID={selected.seminarID} disabled={create.isPending} />
+                <CertificatePreparation mode="review" seminarID={selected.seminarID} disabled={create.isPending} />
               </section>
               <section hidden={current !== 3} className="flex-1 fade-view">
                 <CertificatePreparation mode="issue" seminarID={selected.seminarID} disabled={create.isPending} />

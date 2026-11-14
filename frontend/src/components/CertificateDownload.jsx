@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Btn, Certificate } from './design-system';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { pageSizeMm } from '../lib/certificateTemplate';
+import { saveBlob } from '../lib/saveBlob';
 
 export default function CertificateDownload({ cert, onClose }) {
   const dialog = useRef(null);
@@ -27,14 +28,7 @@ export default function CertificateDownload({ cert, onClose }) {
       const png = await toPng(node, { pixelRatio: 3, preferredFontFormat: 'woff2',
         filter: element => !element.classList?.contains('cert-reveal') });
       const bytes = await createCertificatePdf(png, pageSizeMm(cert.template), cert.id);
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `CICT-Certificate-${cert.id}.pdf`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      saveBlob(new Blob([bytes], { type: 'application/pdf' }), `CICT-Certificate-${cert.id}.pdf`);
     } catch { setError('Could not generate the certificate PDF. Please try again.'); }
     finally { setDownloading(false); }
   }

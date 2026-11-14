@@ -1,9 +1,9 @@
 import { keccak256, toBytes } from "viem";
 
-export function certificateHash(certificate, context) {
-  // Field order and version define the canonical payload used again at issuance and verification.
-  return keccak256(toBytes(JSON.stringify({
-    version: 1,
+// Field order and version define the canonical payload used again at issuance and verification.
+export function certificatePayload(certificate, context) {
+  return {
+    version: 2,
     chainId: context.chainId,
     contractAddress: context.contractAddress.toLowerCase(),
     issuerAddress: context.issuerAddress.toLowerCase(),
@@ -12,29 +12,25 @@ export function certificateHash(certificate, context) {
     recipientName: certificate.recipientName,
     seminarTitle: certificate.seminarTitle,
     seminarDate: certificate.seminarDate,
-    burnAuth: "IssuerOnly",
-  })));
+    burnAuth: "Neither",
+  };
 }
 
-export function certificateConsentMessage(certificate, context, hash, nonce, requestedAt) {
+export const certificateHash = (certificate, context) => keccak256(toBytes(JSON.stringify(certificatePayload(certificate, context))));
+
+// Signed once when the student links their wallet; it is their standing consent to every later certificate.
+export function walletConsentMessage(studentID, nonce, issuedAt) {
   return [
-    "CICT-Cert certificate approval",
-    `Network: Polygon Amoy (${context.chainId})`,
-    `Contract: ${context.contractAddress}`,
-    `Issuer wallet: ${context.issuerAddress}`,
-    `Certificate number: ${certificate.certificateNo}`,
-    `Recipient: ${certificate.recipientName}`,
-    `Seminar: ${certificate.seminarTitle}`,
-    `Seminar date: ${certificate.seminarDate}`,
-    `Recipient wallet: ${certificate.walletAddress.toLowerCase()}`,
-    `Certificate hash: ${hash}`,
+    "CICT-Cert wallet link",
+    `Student ID: ${studentID}`,
     "",
-    "I approve issuance of this specific certificate to my wallet with the details above.",
-    "Only the issuer may revoke (burn) this certificate. I cannot transfer it or burn it myself.",
-    "The issued certificate details and burn authorization cannot be changed.",
+    "I link this wallet to my CICT-Cert account and agree to receive my CICT seminar certificates at it",
+    "as non-transferable tokens on Polygon Amoy.",
+    "Each certificate is issued under the name shown for it in my student portal.",
+    "CICT may mark a certificate as revoked. I cannot transfer or remove a certificate.",
     "This signature does not send a blockchain transaction or authorize spending.",
     "",
-    `Request nonce: ${nonce}`,
-    `Requested at: ${requestedAt}`,
+    `Nonce: ${nonce}`,
+    `Issued at: ${issuedAt}`,
   ].join("\n");
 }

@@ -207,7 +207,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
             )}
             {replace.data && (
               <Note tone="success" icon="ph-check-circle" role="status">
-                Replacement certificate No. {replace.data.certificateNo} prepared. The student must approve it in the portal; then issue it from the seminar's certificate list.
+                Replacement certificate No. {replace.data.certificateNo} prepared. Issue it from the seminar's Issue step; it goes out in a new batch.
               </Note>
             )}
             {outcome && !failure && <Note tone={outcome.status === 'REVOKED' ? 'success' : outcome.transactionStatus === 'FAILED' ? 'danger' : 'pending'}
@@ -273,7 +273,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
           <h2 id="replace-title" className="pr-10 font-serif text-3xl font-medium">Prepare replacement</h2>
           <p className="mt-2 mb-5 text-sm text-ink-soft">
             Replaces revoked certificate No. {found.certificateNo}. Correct the details below; they are saved only on the new certificate, which gets a new number.
-            The student must approve it again before it can be issued.
+            It is issued in a new batch from the seminar's Issue step.
           </p>
           <form className="space-y-4" onSubmit={e => { e.preventDefault(); if (!busy && factsComplete) replace.mutate(); }}>
             <div>

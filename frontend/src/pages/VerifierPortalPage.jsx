@@ -108,6 +108,7 @@ export default function VerifierPortalPage({
         <Row label="Status"><Pill status={banner.seal} /></Row>
         {result.status !== 'NotFound' && <>
           <Row label="Token ID" mono>{result.tokenId}</Row>
+          <Row label="Batch" mono>#{result.batchId}</Row>
           <Row label="Issued">{formatTime(result.issuedAt)}</Row>
           <Row label="Revoked">{formatTime(result.revokedAt)}</Row>
           <Row label="Issuer wallet" mono>{result.issuerAddress}</Row>

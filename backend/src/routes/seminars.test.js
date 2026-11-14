@@ -43,7 +43,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
       ('faculty@example.test', 'FACULTY', 'test-only'), ('assistant@example.test', 'FACULTY', 'test-only'), ('existing@gmail.com', 'STUDENT', NULL);
     INSERT INTO cict_faculty ("userID", "firstName", "lastName", "canIssue") VALUES (1, 'Ana', 'Reyes', true), (2, 'Pedro', 'Cruz', false);
     INSERT INTO student ("userID", "fullName", "program") VALUES (3, 'Existing Student', 'BSCS');
-    INSERT INTO student_wallet ("studentID", "studentWalletAddress") VALUES (1, '0x1111111111111111111111111111111111111111');
+    INSERT INTO student_wallet ("studentID", "studentWalletAddress", "consentMessage", "consentSignature") VALUES (1, '0x1111111111111111111111111111111111111111', 'consent', '0xsig');
   `);
   const app = express();
   app.use(express.json({ limit: "2mb" }), cookieParser());
@@ -278,8 +278,8 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const all = await previewAttendance(attendanceCSV);
     assert.equal((await saveAttendance(attendanceCSV, all.data.previewHash)).status, 200);
     await db.query(`INSERT INTO issuer_wallet ("issuerWalletAddress", label, network) VALUES ('0x3333333333333333333333333333333333333333', 'CICT', 'polygon-amoy')`);
-    const { rows: [issued] } = await db.query(`INSERT INTO certificate ("studentID", "seminarID", "studentWalletID", "authorizedBy", "issuerWalletID", "recipientName", "seminarTitle", "seminarDate", "certificateHash", "consentMessage", "consentSignature", "consentedAt", "issuedAt", status)
-      VALUES (1, $1, 1, 1, 1, 'Existing Student', 'Attendance test', '2026-11-15', $2, 'Test certificate approval', 'test-only signature evidence', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'ISSUED') RETURNING "certificateID"`, [attendanceID, "0x" + "a".repeat(64)]);
+    const { rows: [issued] } = await db.query(`INSERT INTO certificate ("studentID", "seminarID", "studentWalletID", "authorizedBy", "issuerWalletID", "recipientName", "seminarTitle", "seminarDate", "certificateHash", "issuedAt", status)
+      VALUES (1, $1, 1, 1, 1, 'Existing Student', 'Attendance test', '2026-11-15', $2, CURRENT_TIMESTAMP, 'ISSUED') RETURNING "certificateID"`, [attendanceID, "0x" + "a".repeat(64)]);
     const withoutIssued = "google_account\nana@gmail.com";
     const preview = await previewAttendance(withoutIssued);
     assert.equal(preview.data.blocked[0].email, "existing@gmail.com");

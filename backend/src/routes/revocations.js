@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { pool } from "../db/pool.js";
 import { IssuanceError } from "../services/issuance.js";
-import { findCertificate, prepareReplacement, revokeCertificate } from "../services/revocation.js";
+import { findCertificate, prepareReplacement, revokeCertificates } from "../services/revocation.js";
 
 const router = Router();
 router.use("/faculty/certificates", requireFaculty, requireActiveFaculty);
@@ -42,6 +42,15 @@ router.get("/faculty/certificates", async (req, res) => {
   res.json(rows);
 });
 
+// Batch revocation: one transaction for every listed certificate. Registered before :certificateNo.
+router.post(["/faculty/certificates/revoke", "/faculty/certificates/revocation/check"], requireCanIssue, async (req, res) => {
+  const numbers = req.body?.certificateNos;
+  if (!Array.isArray(numbers) || numbers.some(value => !/^[1-9]\d{0,18}$/.test(String(value)) || BigInt(value) > 9223372036854775807n)) {
+    return res.status(400).json({ error: "Choose the certificates to revoke." });
+  }
+  res.json(await revokeCertificates(numbers.map(String), req.faculty, req.body.reason, req.path.endsWith("/revoke")));
+});
+
 router.get("/faculty/certificates/:certificateNo", async (req, res) => {
   const certificate = await findCertificate(req.params.certificateNo);
   if (!certificate) return res.status(404).json({ error: "Certificate not found." });
@@ -52,7 +61,8 @@ router.get("/faculty/certificates/:certificateNo", async (req, res) => {
 router.post(["/faculty/certificates/:certificateNo/revoke", "/faculty/certificates/:certificateNo/revocation/check"],
   requireCanIssue, async (req, res) => {
     const allowNew = req.path.endsWith("/revoke");
-    res.json(await revokeCertificate(req.params.certificateNo, req.faculty, req.body?.reason, allowNew));
+    const { certificates, warning } = await revokeCertificates([req.params.certificateNo], req.faculty, req.body?.reason, allowNew);
+    res.json({ ...certificates[0], ...(warning && { warning }) });
   });
 
 // Corrected facts are entered by faculty and saved only on the new certificate.

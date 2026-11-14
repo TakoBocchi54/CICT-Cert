@@ -17,6 +17,7 @@ if (!legacyTimezone) {
       "004_remove_certificate_created_at.sql",
       "005_signed_transaction.sql",
       "006_certificate_templates.sql",
+      "007_merkle_batches.sql",
     ]) {
       const sql = await readFile(new URL(`../sql/migrations/${name}`, import.meta.url), "utf8");
       await client.query(sql);

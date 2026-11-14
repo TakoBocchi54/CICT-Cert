@@ -13,28 +13,6 @@
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "certHash",
-        "type": "bytes32"
-      }
-    ],
-    "name": "AlreadyIssued",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "AlreadyRevoked",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "address",
         "name": "sender",
         "type": "address"
@@ -142,12 +120,38 @@
   },
   {
     "inputs": [],
+    "name": "InvalidBatch",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidInclusionProof",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidRevocationProof",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Soulbound",
     "type": "error"
   },
   {
     "inputs": [],
     "name": "UnauthorizedIssuer",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "batchId",
+        "type": "uint256"
+      }
+    ],
+    "name": "UnknownBatch",
     "type": "error"
   },
   {
@@ -221,6 +225,43 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "uint64",
+        "name": "batchId",
+        "type": "uint64"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "seminarId",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "root",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "firstTokenId",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32[]",
+        "name": "certHashes",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "BatchIssued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "from",
         "type": "address"
@@ -252,30 +293,24 @@
     "inputs": [
       {
         "indexed": true,
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": true,
         "internalType": "bytes32",
-        "name": "certHash",
+        "name": "previousRoot",
         "type": "bytes32"
       },
       {
         "indexed": true,
-        "internalType": "address",
-        "name": "recipient",
-        "type": "address"
+        "internalType": "bytes32",
+        "name": "newRoot",
+        "type": "bytes32"
       },
       {
         "indexed": false,
-        "internalType": "uint64",
-        "name": "revokedAt",
-        "type": "uint64"
+        "internalType": "uint256[]",
+        "name": "tokenIds",
+        "type": "uint256[]"
       }
     ],
-    "name": "Revoked",
+    "name": "RevocationRootUpdated",
     "type": "event"
   },
   {
@@ -335,6 +370,52 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "batchId",
+        "type": "uint256"
+      }
+    ],
+    "name": "batchOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "root",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "seminarId",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "issuedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "firstTokenId",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "count",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct CICTCertificate.Batch",
+        "name": "",
+        "type": "tuple"
       }
     ],
     "stateMutability": "view",
@@ -405,22 +486,32 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
+        "internalType": "uint64",
+        "name": "seminarId",
+        "type": "uint64"
       },
       {
         "internalType": "bytes32",
-        "name": "certHash",
+        "name": "root",
         "type": "bytes32"
+      },
+      {
+        "internalType": "address[]",
+        "name": "recipients",
+        "type": "address[]"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "certHashes",
+        "type": "bytes32[]"
       }
     ],
-    "name": "issue",
+    "name": "issueBatch",
     "outputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
+        "internalType": "uint64",
+        "name": "batchId",
+        "type": "uint64"
       }
     ],
     "stateMutability": "nonpayable",
@@ -434,6 +525,19 @@
         "internalType": "address",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastBatchId",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -484,23 +588,8 @@
       {
         "components": [
           {
-            "internalType": "bytes32",
-            "name": "certHash",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "address",
-            "name": "recipient",
-            "type": "address"
-          },
-          {
             "internalType": "uint64",
-            "name": "issuedAt",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "revokedAt",
+            "name": "batchId",
             "type": "uint64"
           }
         ],
@@ -513,14 +602,32 @@
     "type": "function"
   },
   {
-    "inputs": [
+    "inputs": [],
+    "name": "revocationRoot",
+    "outputs": [
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
-    "name": "revoke",
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "newRoot",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256[]",
+        "name": "tokenIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "revokeBatch",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -671,9 +778,29 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
         "internalType": "bytes32",
         "name": "certHash",
         "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "uint64",
+        "name": "smtBitmap",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "smtSiblings",
+        "type": "bytes32[]"
       }
     ],
     "name": "verify",
@@ -684,23 +811,23 @@
         "type": "uint8"
       },
       {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      },
-      {
         "internalType": "address",
         "name": "recipient",
         "type": "address"
       },
       {
         "internalType": "uint64",
-        "name": "issuedAt",
+        "name": "batchId",
         "type": "uint64"
       },
       {
         "internalType": "uint64",
-        "name": "revokedAt",
+        "name": "seminarId",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "issuedAt",
         "type": "uint64"
       }
     ],

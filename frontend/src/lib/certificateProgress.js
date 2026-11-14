@@ -5,5 +5,4 @@ export const certificateProgress = certificate =>
     : !certificate.attended ? 'On hold: attendance not confirmed'
     : !certificate.walletConnected ? 'Awaiting wallet setup'
     : certificate.status === 'FAILED' ? 'Mint failed; ready to retry'
-    : certificate.consentedAt ? 'Approved; awaiting issuance'
-    : 'Awaiting student approval';
+    : 'Ready to issue';

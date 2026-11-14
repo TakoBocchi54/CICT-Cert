@@ -8,7 +8,7 @@ import LoginPage from './pages/LoginPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import StudentCollectionPage from './pages/StudentCollectionPage';
 import StudentCertificatePage from './pages/StudentCertificatePage';
-import StudentCertificateApprovals from './components/StudentCertificateApprovals';
+import StudentUpcomingCertificates from './components/StudentUpcomingCertificates';
 import CertificateDownload from './components/CertificateDownload';
 import FacultyAccountPage from './pages/FacultyAccountPage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
@@ -30,7 +30,7 @@ function AppContent() {
   const [selectedCertId, setSelectedCertId] = useState(null);
   const { web3Auth, isConnected } = useWeb3Auth();
   const studentCertificates = useQuery({
-    queryKey: ['student-certificate-approvals', user?.studentID],
+    queryKey: ['student-certificates', user?.studentID],
     queryFn: ({ signal }) => api('/api/student/certificates', { signal }),
     enabled: user?.role === 'student', retry: false, refetchOnWindowFocus: false,
   });
@@ -175,7 +175,7 @@ function AppContent() {
 
   // Get student certificates
   const studentCerts = (studentCertificates.data || []).filter(certificate => ['ISSUED', 'REVOKED'].includes(certificate.status))
-    .map(certificate => ({ id: certificate.certificateNo, recipient: certificate.recipientName,
+    .map(certificate => ({ id: certificate.certificateNo, certificateID: certificate.certificateID, recipient: certificate.recipientName,
       seminar: certificate.seminarTitle, iso: certificate.seminarDate, hash: certificate.certificateHash,
       status: certificate.status === 'ISSUED' ? 'Verified' : 'Revoked', block: certificate.blockNum,
       tokenID: certificate.tokenID, transactionHash: certificate.transactionHash, template: certificate.template }));
@@ -242,7 +242,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentCertificateApprovals key={user.studentID} studentID={user.studentID} />
+                  <StudentUpcomingCertificates certificates={studentCertificates} />
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
                     onCertificateClick={openCertificate}
@@ -272,7 +272,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentCertificateApprovals key={user.studentID} studentID={user.studentID} />
+                  <StudentUpcomingCertificates certificates={studentCertificates} />
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCollectionPage
                     certificates={studentCerts}
                     onCertificateClick={openCertificate}

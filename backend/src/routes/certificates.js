@@ -9,36 +9,38 @@ const router = Router();
 router.get("/certificates/verify/:certHash", async (req, res) => {
     res.set("Cache-Control", "no-store");
 
-    const { certHash } = req.params;
+    const certHash = req.params.certHash.toLowerCase();
 
-    if (!/^0x[0-9a-fA-F]{64}$/.test(certHash)) {
+    if (!/^0x[0-9a-f]{64}$/.test(certHash)) {
         return res.status(400).json({
             error: "Certificate hash must be 0x followed by 64 hexadecimal characters",
         });
     }
 
     try {
+        // The contract decides the status from a Merkle inclusion proof and a sparse Merkle revocation proof.
         const [record, context] = await Promise.all([verifyCertificate(certHash), certificateIssuer()]);
-        const [status, tokenId, recipient, issuedAt, revokedAt] = record;
         let certificate = null;
         let detailsStatus = "NotFound";
-        if (status !== 0) {
+        let revokedAt = null;
+        if (record.status !== 0) {
             try {
                 const { rows } = await pool.query(
-                    `SELECT c."certificateNo", c."recipientName", c."seminarTitle",
+                    `SELECT c."certificateNo", c."recipientName", c."seminarTitle", c."revokedAt",
                             to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", w."studentWalletAddress" AS "walletAddress",
                             ${certificateTemplateSql("c")}
                      FROM certificate c LEFT JOIN student_wallet w ON w."studentWalletID" = c."studentWalletID"
-                     WHERE c."certificateHash" = $1`, [certHash.toLowerCase()],
+                     WHERE c."certificateHash" = $1`, [certHash],
                 );
                 const saved = rows[0];
                 detailsStatus = saved ? "Mismatch" : "Missing";
-                // Only publish the snapshot if its facts reproduce the hash registered on this contract.
-                if (saved?.walletAddress?.toLowerCase() === recipient.toLowerCase() &&
-                    certificateHash(saved, context) === certHash.toLowerCase()) {
+                // Only publish the snapshot if its facts reproduce the hash proven on this contract and the token's owner.
+                if (saved?.walletAddress?.toLowerCase() === record.recipient.toLowerCase() &&
+                    certificateHash(saved, context) === certHash) {
                     certificate = { certificateNo: saved.certificateNo, recipientName: saved.recipientName,
                         seminarTitle: saved.seminarTitle, seminarDate: saved.seminarDate, template: saved.template };
                     detailsStatus = "Verified";
+                    revokedAt = saved.revokedAt;
                 }
             } catch (err) {
                 detailsStatus = "Unavailable";
@@ -47,11 +49,13 @@ router.get("/certificates/verify/:certHash", async (req, res) => {
         }
 
         res.json({
-            status: ["NotFound", "Valid", "Revoked"][status],
-            tokenId: tokenId.toString(),
-            recipient,
-            issuedAt: issuedAt.toString(),
-            revokedAt: revokedAt.toString(),
+            status: ["NotFound", "Valid", "Revoked"][record.status],
+            tokenId: record.tokenID ?? "0",
+            batchId: (record.batchId ?? 0n).toString(),
+            recipient: record.recipient ?? "0x0000000000000000000000000000000000000000",
+            issuedAt: (record.issuedAt ?? 0n).toString(),
+            // The chain proves that a certificate is revoked, not when: the time is the revoking block's, saved at finality.
+            revokedAt: revokedAt ? String(Math.floor(revokedAt.getTime() / 1000)) : "0",
             issuerAddress: context.issuerAddress,
             certificate,
             detailsStatus,

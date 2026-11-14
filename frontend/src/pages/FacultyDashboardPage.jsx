@@ -31,9 +31,9 @@ export default function FacultyDashboardPage({
   // What the latest seminar needs next, in workflow order.
   const hero = !latest ? null
     : latest.readyCount ? { count: latest.readyCount, badge: 'Ready to issue', icon: 'ph-check-circle', action: 'Begin issuance',
-      label: plural(latest.readyCount, 'Certificate approved by its student', 'Certificates approved by students') }
-    : latest.awaitingCount ? { count: latest.awaitingCount, badge: 'Awaiting student approval', icon: 'ph-hourglass-medium', action: 'Open seminar',
-      label: plural(latest.awaitingCount, 'Certificate waiting for its student', 'Certificates waiting for students') }
+      label: plural(latest.readyCount, 'Certificate ready for its batch', 'Certificates ready to issue in one batch') }
+    : latest.awaitingCount ? { count: latest.awaitingCount, badge: 'Awaiting wallet setup', icon: 'ph-hourglass-medium', action: 'Open seminar',
+      label: plural(latest.awaitingCount, 'Attendee has not signed in yet', 'Attendees have not signed in yet') }
     : !latest.attendanceCount ? { count: null, badge: 'Attendance not imported', icon: 'ph-users', action: 'Import attendance',
       label: 'Upload the final attendee list' }
     : latest.issuedCount < latest.attendanceCount ? { count: latest.attendanceCount - latest.issuedCount, badge: 'Certificates to prepare', icon: 'ph-stamp', action: 'Open seminar',
@@ -103,7 +103,7 @@ export default function FacultyDashboardPage({
                   </div>
                   <div className="text-xs text-ink-muted mt-2">
                     {seminar.attendanceCount
-                      ? `${seminar.issuedCount} of ${seminar.attendanceCount} issued · ${seminar.readyCount} ready · ${seminar.awaitingCount} awaiting approval`
+                      ? `${seminar.issuedCount} of ${seminar.attendanceCount} issued · ${seminar.readyCount} ready · ${seminar.awaitingCount} awaiting wallet`
                       : 'Attendance not imported yet'}
                   </div>
                 </div>

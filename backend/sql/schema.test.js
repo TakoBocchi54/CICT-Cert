@@ -34,10 +34,16 @@ async function seed(client, legacy = false) {
     ${legacy
       ? `INSERT INTO student ("userID", "firstName", "lastName", "program") VALUES (2, 'Juan', 'Dela Cruz', 'BSCS'), (3, 'Maria', 'Reyes', 'BSIT');`
       : `INSERT INTO student ("userID", "fullName", "program") VALUES (2, 'Juan Dela Cruz', 'BSCS'), (3, 'Maria Reyes', 'BSIT');`}
-    INSERT INTO student_wallet ("studentID", "studentWalletAddress") VALUES (1, '0x1111111111111111111111111111111111111111'), (2, '0x2222222222222222222222222222222222222222');
+    ${legacy
+      ? `INSERT INTO student_wallet ("studentID", "studentWalletAddress") VALUES (1, '0x1111111111111111111111111111111111111111'), (2, '0x2222222222222222222222222222222222222222');`
+      : wallets}
     INSERT INTO issuer_wallet ("issuerWalletAddress", "label", "network") VALUES ('0x3333333333333333333333333333333333333333', 'CICT', 'polygon-amoy');
   `);
 }
+
+// Wallet links carry the signed consent message since migration 007.
+const wallets = `INSERT INTO student_wallet ("studentID", "studentWalletAddress", "consentMessage", "consentSignature") VALUES
+  (1, '0x1111111111111111111111111111111111111111', 'consent', '0xsig'), (2, '0x2222222222222222222222222222222222222222', 'consent', '0xsig');`;
 
 async function rejectsSQL(client, statement, pattern) {
   await client.query("SAVEPOINT expected_failure");
@@ -74,6 +80,12 @@ for (const migrated of [false, true]) {
         const { rows: oldNames } = await client.query(`SELECT column_name FROM information_schema.columns
           WHERE table_schema = current_schema() AND table_name = 'student' AND column_name IN ('firstName', 'lastName')`);
         assert.equal(oldNames.length, 0);
+        // 007 refuses wallet links without saved consent; the documented step is the test-data reset.
+        await assert.rejects(client.query(await sql("migrations/007_merkle_batches.sql")), /resetTestData/);
+        await client.query("ROLLBACK");
+        await client.query(`TRUNCATE student_wallet, certificate, blockchain_record RESTART IDENTITY`);
+        await client.query(await sql("migrations/007_merkle_batches.sql"));
+        await client.query(wallets);
       }
       await client.query("BEGIN");
       assert.equal((await client.query(`SELECT "signedTransaction" FROM blockchain_record LIMIT 1`)).rowCount, 0);
@@ -92,13 +104,17 @@ for (const migrated of [false, true]) {
       await rejectsSQL(client, `INSERT INTO certificate ${draft}`, /uq_certificate_active_registration/);
       const id = pending.certificateID;
       await rejectsSQL(client, `UPDATE certificate SET "studentWalletID" = 2 WHERE "certificateID" = ${id}`, /fk_certificate_student_wallet_match/);
-      await rejectsSQL(client, `UPDATE certificate SET "consentMessage" = 'Incomplete consent' WHERE "certificateID" = ${id}`, /chk_certificate_consent/);
+      await rejectsSQL(client, `UPDATE certificate SET "certificateHash" = '0x${"a".repeat(64)}' WHERE "certificateID" = ${id}`, /chk_certificate_hash_wallet/);
+      await rejectsSQL(client, `INSERT INTO student_wallet ("studentID", "studentWalletAddress", "consentMessage", "consentSignature")
+        VALUES (3, '0x4444444444444444444444444444444444444444', ' ', '0xsig')`, /consentMessage/);
+      assert.equal(Object.hasOwn(pending, "consentedAt"), false);
       await rejectsSQL(client, `UPDATE certificate SET "status" = 'ISSUED' WHERE "certificateID" = ${id}`, /chk_certificate_issuance/);
       await client.query(`UPDATE certificate SET "studentWalletID" = 1, "authorizedBy" = 1,
-        "certificateHash" = '0x${"a".repeat(64)}', "consentMessage" = 'Certificate-specific approval',
-        "consentSignature" = 'test-only evidence; cryptographic verification belongs in the issuing service', "consentedAt" = CURRENT_TIMESTAMP
-        WHERE "certificateID" = ${id}`);
-      await rejectsSQL(client, `UPDATE certificate SET "recipientName" = 'Changed name' WHERE "certificateID" = ${id}`, /Clear the previous consent/);
+        "certificateHash" = '0x${"a".repeat(64)}' WHERE "certificateID" = ${id}`);
+      // Once hashed (a batch is being signed) the facts are frozen; a name correction must clear the hash with it.
+      await rejectsSQL(client, `UPDATE certificate SET "recipientName" = 'Changed name' WHERE "certificateID" = ${id}`, /Clear the certificate hash/);
+      await client.query(`UPDATE certificate SET "recipientName" = 'Juan P. Dela Cruz', "certificateHash" = NULL WHERE "certificateID" = ${id}`);
+      await client.query(`UPDATE certificate SET "certificateHash" = '0x${"a".repeat(64)}' WHERE "certificateID" = ${id}`);
       const { rows: [issued] } = await client.query(`UPDATE certificate SET "status" = 'ISSUED', "issuedAt" = CURRENT_TIMESTAMP WHERE "certificateID" = ${id} RETURNING "issuedAt"`);
       assert.ok(issued.issuedAt instanceof Date);
       await rejectsSQL(client, `UPDATE certificate SET "recipientName" = 'Changed name' WHERE "certificateID" = ${id}`, /immutable/);
@@ -114,6 +130,9 @@ for (const migrated of [false, true]) {
       assert.ok(transaction.createdAt instanceof Date);
       assert.equal(Object.hasOwn(transaction, "failureReason"), false);
       await rejectsSQL(client, attempt, /uq_blockchain_pending_certificate/);
+      // The certificates of one batch share a transaction hash.
+      await client.query(`INSERT INTO blockchain_record ("certificateID", "transactionType", "transactionHash", "requestedBy", "network", "transactionStatus")
+        VALUES (${id}, 'MINT', '0x${"b".repeat(64)}', 1, 'polygon-amoy', 'FAILED'), (${replacement.certificateID}, 'MINT', '0x${"b".repeat(64)}', 1, 'polygon-amoy', 'FAILED')`);
       await rejectsSQL(client, `UPDATE blockchain_record SET "transactionStatus" = 'CONFIRMED'`, /chk_transaction_confirmation/);
       await client.query(`UPDATE blockchain_record SET "transactionStatus" = 'FAILED'`);
       await client.query(attempt);
