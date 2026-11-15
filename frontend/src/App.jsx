@@ -8,7 +8,6 @@ import LoginPage from './pages/LoginPage';
 import StudentDashboardPage from './pages/StudentDashboardPage';
 import StudentCollectionPage from './pages/StudentCollectionPage';
 import StudentCertificatePage from './pages/StudentCertificatePage';
-import StudentUpcomingCertificates from './components/StudentUpcomingCertificates';
 import CertificateDownload from './components/CertificateDownload';
 import FacultyAccountPage from './pages/FacultyAccountPage';
 import FacultyDashboardPage from './pages/FacultyDashboardPage';
@@ -174,6 +173,9 @@ function AppContent() {
   })[location.pathname] || (location.pathname.startsWith('/student/certificates/') ? 'student-certificates' : '');
 
   // Get student certificates
+  // The student pages render only once the list has loaded; this shows the loading or error state meanwhile.
+  const certificatesStatus = studentCertificates.isPending ? <p role="status" className="text-sm text-ink-muted">Loading certificates...</p>
+    : studentCertificates.error ? <p role="alert" className="text-sm text-revoked">{studentCertificates.error.message}</p> : null;
   const studentCerts = (studentCertificates.data || []).filter(certificate => ['ISSUED', 'REVOKED'].includes(certificate.status))
     .map(certificate => ({ id: certificate.certificateNo, certificateID: certificate.certificateID, recipient: certificate.recipientName,
       seminar: certificate.seminarTitle, iso: certificate.seminarDate, hash: certificate.certificateHash,
@@ -242,7 +244,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentUpcomingCertificates certificates={studentCertificates} />
+                  {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
                     onCertificateClick={openCertificate}
@@ -272,7 +274,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
-                  <StudentUpcomingCertificates certificates={studentCertificates} />
+                  {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCollectionPage
                     certificates={studentCerts}
                     onCertificateClick={openCertificate}
@@ -299,6 +301,7 @@ function AppContent() {
                   userTitle={user.title}
                 />
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                  {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCertificatePage
                     certificates={studentCerts}
                     onBack={() => navigate('/student/collection')}

@@ -308,9 +308,9 @@ These addresses are public identifiers, not secrets. Reconfirm the configured de
 - **Bug fix:** the seminars/issuance page showed multiple "Import final attendance" sections. `AttendanceImport` and `CertificatePreparation` had the same `key` as siblings. They now use `attendance-<id>` and `prepare-<id>`. Reproduced and verified in a throwaway jsdom harness, not in a real browser.
 - **`backend/scripts/resetTestData.js`:** pre-deployment cleanup. Without `--yes` it prints the host and row counts and deletes nothing. With `--yes` it truncates `blockchain_record`, `certificate`, `seminar_registration`, `seminar`, `student_wallet` and `student` (restarting the certificate sequence) and deletes `STUDENT` users. It keeps faculty and `issuer_wallet`. Tested on a temporary schema only. It cannot touch anything already minted on-chain.
 
-### Mockup integration (`design/CICT-Cert-Ui.html`)
+### Mockup integration (finished; the `design/CICT-Cert-Ui.html` mockup was removed from the repo on 16 November)
 
-The mockup is the original prototype; global CSS and the login, student, revocation and nav pages already match it. The user is integrating the rest **one step at a time, approving each feature first**. Not integrated by choice: the faculty issue wizard (our flow is CSV-driven), the fake "attendance processing" panel, the "upcoming seminars" list, the Verifications activity page (needs new logging), and the simulated QR scan. Share modal: not yet decided.
+The mockup was the original prototype and was never committed; global CSS and the login, student, revocation and nav pages already match it. The user is integrating the rest **one step at a time, approving each feature first**. Not integrated by choice: the faculty issue wizard (our flow is CSV-driven), the fake "attendance processing" panel, the "upcoming seminars" list, the Verifications activity page (needs new logging), and the simulated QR scan. Share modal: not yet decided.
 
 - [x] **Step 1, faculty dashboard hero.**
   - `GET /api/faculty/seminars` now also returns `readyCount` (attended, student-approved, `PENDING`/`FAILED`), `awaitingCount` (attended, prepared, not yet approved) and `issuedCount` per seminar.
@@ -350,7 +350,7 @@ The mockup is the original prototype; global CSS and the login, student, revocat
   - Clicking a certificate on the student dashboard or collection now opens this page instead of the download popup. The **Download** buttons still open the popup, and the page's **Download PDF** reuses it.
   - The page shows the certificate with its real QR, a status seal, and a blockchain record: number, network, ERC-5484, token ID, block, and the issuing transaction linked to Polygonscan. It has **Verify** and **Back to my certificates**, plus a "Certificate not found" state for a number outside the student's collection.
   - No backend change: it uses the student certificate list App already loads. Checked with lint, build and a jsdom harness. Not yet viewed in a real browser.
-- [ ] Step 5, Share modal, only if the user wants it.
+- [ ] Step 5, Share modal, only if the user wants it. The mockup is gone, so this would need a new design.
 
 ### Done (12 November): student accounts separate from seminars
 
@@ -430,7 +430,7 @@ Faculty can design certificates instead of always using the built-in layout. The
 - **Contract** (`CICTCertificate.sol`, rewritten; constructor and deploy script unchanged): `issueBatch(seminarId, root, recipients, certHashes)` stores an immutable Merkle root per batch (linked to the seminar) and mints one soulbound token each; each token stores only its batch ID. `revokeBatch(newRoot, tokenIds)` replaces one sparse-Merkle-tree revocation root (depth 64, keyed by token ID); tokens are not burned. `verify(tokenId, certHash, merkleProof, smtBitmap, smtSiblings)` returns Valid/Revoked/NotFound. `burnAuth` is now `Neither`. `BatchIssued` emits the batch's hashes so trees can be rebuilt from the chain.
 - **Benchmarks** (`contracts/bench/Benchmarks.sol`, `test/GasBenchmark.ts`): batch of 100 costs 74,871 gas per certificate vs 100,805 for one transaction each with a stored hash (26% less). Dropping the per-token batch-ID slot would give about 48% but `verify` would then need the batch ID passed in; **left as specified, user to decide**. Revoking 1,000: SMT 459k gas, bitmap 1.0M, burn 8.5M, mapping 22.8M. Proofs: 4 hashes (128 bytes) for a batch of 100; compressed SMT proof 8 to 328 bytes vs 2,048 uncompressed.
 - **Backend:** `utils/merkle.js` (viem only); migration `007_merkle_batches.sql` (consent moves to `student_wallet`, per-certificate consent columns removed, `transactionHash` non-unique); canonical hash version 2; wallet-link message now carries the consent; batch issue/check routes (`ISSUE_BATCH_SIZE`, default 100, 1 to 200); batch revoke/check routes (max 200); pre-issuance name correction (`PATCH .../certificates/:certificateID`); student proof download (`GET /api/student/certificates/:certificateID/proof`); verifier rebuilds both proofs and calls `verify`. Auto-issuance and the consent routes removed. 110 backend tests pass against local PostgreSQL; 8 contract tests pass.
-- **Frontend:** wizard steps are Seminar, Attendance, **Review**, Issue. Review lists the printed names with a **Correct name** control; Issue sends all ready certificates in batches with one confirmation and a seminar-level **Check transaction**. Students get a read-only **Upcoming certificates** card instead of approvals, and a **Download Merkle proof (JSON)** button on a certificate's page. The Registry has checkboxes and **Revoke N** for batch revocation. The verifier shows the batch number. Lint (6 errors, all pre-existing in `useStudentSession.js` and `LoginPage.jsx`), build and the frontend tests pass. **Not tried in a browser.**
+- **Frontend:** wizard steps are Seminar, Attendance, **Review**, Issue. Review lists the printed names with a **Correct name** control; Issue sends all ready certificates in batches with one confirmation and a seminar-level **Check transaction**. Students got a read-only **Upcoming certificates** card instead of approvals (removed 16 November: students now see certificates only once issued), and a **Download Merkle proof (JSON)** button on a certificate's page. The Registry has checkboxes and **Revoke N** for batch revocation. The verifier shows the batch number. Lint (6 errors, all pre-existing in `useStudentSession.js` and `LoginPage.jsx`), build and the frontend tests pass. **Not tried in a browser.**
 
 ## 5. Certificate hash, statuses, and explorer context
 
@@ -488,7 +488,7 @@ Removed with the per-certificate approval it depended on; faculty now review the
 ### Merkle batch issuance and SMT revocation (done 15 November, not deployed)
 
 - [ ] Decide whether to drop the per-token batch-ID slot (about 48% issuance saving instead of 26%; `verify` would take the batch ID as an argument).
-- [ ] Try the new UI in a browser: Review step and name correction, batch Issue, Upcoming certificates, proof download, Registry batch revoke.
+- [ ] Try the new UI in a browser: Review step and name correction, batch Issue, proof download, Registry batch revoke.
 - [ ] Deploy and run end to end on Amoy (see section 10).
 
 ### Priority 3: connect remaining faculty certificate views and sharing
@@ -628,7 +628,7 @@ Keep `.env`, issuer private keys, passwords, cookie values, identity tokens, con
 2. Sign in as authorized faculty. Show the Students tab and explain that registering a Google account only enables sign-in; it is not attendance or issuance.
 3. Show the final attendance preview and confirmation.
 4. Prepare pending certificates. Point out a recipient waiting for wallet setup versus one ready to issue, and correct a name in the Review step.
-5. Sign in as a registered student, show the linked wallet and the read-only Upcoming certificates card with their printed name.
+5. Sign in as a registered student, show the linked wallet (certificates appear once issued).
 6. Return to faculty and issue the batch if a live mint is intended. Show its single transaction link and the token IDs.
 7. Show the student's dashboard/collection, full hash, and PDF download with the QR beside the seal.
 8. Open public verification in a logged-out browser. Show the recipient/seminar/number and matching blockchain details.

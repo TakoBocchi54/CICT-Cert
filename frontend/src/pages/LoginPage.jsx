@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { AUTH_CONNECTION, WALLET_CONNECTORS } from '@web3auth/modal';
 import { useWeb3AuthConnect, useWeb3AuthDisconnect } from '@web3auth/modal/react';
 import { useStudentSession } from '../hooks/useStudentSession';
 import { Lockup, Rosette, Certificate, Btn } from '../components/design-system';
+import ConsentDialog from '../components/ConsentDialog';
 import { api } from '../lib/api';
 
 // Sample certificate for hero display
@@ -27,9 +29,10 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
   const [error, setError] = useState('');
   const [hasLoggedIn, setHasLoggedIn] = useState(false);
   const [manualDisconnect, setManualDisconnect] = useState(false);
-  
+  const [showConsent, setShowConsent] = useState(false);
+
   // Web3Auth hooks for student login
-  const { connect, loading: web3Loading, error: web3Error } = useWeb3AuthConnect();
+  const { connectTo, loading: web3Loading, error: web3Error } = useWeb3AuthConnect();
   const { disconnect } = useWeb3AuthDisconnect();
   const studentAttempt = useRef(0);
   const facultyRequest = useRef(null);
@@ -91,7 +94,8 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
 
     try {
       // Connect to Web3Auth
-      const connection = await connect();
+      // Straight to Google's account picker; Web3Auth's own login modal is skipped.
+      const connection = await connectTo(WALLET_CONNECTORS.AUTH, { authConnection: AUTH_CONNECTION.GOOGLE });
       
       if(attemptId !== studentAttempt.current) return; // Ignore if a new attempt has started
 
@@ -196,7 +200,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
           </div>
           
           <div className="eyebrow mb-3">Sign in</div>
-          <h2 className="font-serif text-4xl font-medium mb-8">Welcome back.</h2>
+          <h2 className="font-serif text-4xl font-medium mb-8">Welcome to CICT-Cert.</h2>
           
           {/* Role Toggle */}
           <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-paper-2 border border-[var(--line)] mb-7">
@@ -310,9 +314,9 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
                     </p>
                   )}
 
-                  <Btn 
+                  <Btn
                     type="button"
-                    className="w-full !py-3.5 !bg-white !text-ink border-2 border-[var(--line)] hover:!bg-paper-2" 
+                    className="w-full !py-3.5 !bg-white !text-ink border-2 border-[var(--line)] hover:!bg-paper-2"
                     icon="ph-google-logo"
                     onClick={handleStudentLogin}
                     disabled={web3Loading || studentSession.status === 'working'}
@@ -325,10 +329,16 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
                       ? 'Retry sign in'
                       : 'Sign in with Google'}
                   </Btn>
+                  <p className="mt-3 text-xs text-ink-muted">
+                    By continuing, you agree to{' '}
+                    <button type="button" onClick={() => setShowConsent(true)}
+                      className="cursor-pointer font-semibold text-forest underline hover:text-ink">CICT-Cert certificate consent</button>.
+                  </p>
                 </div>
               </>
             )}
           </form>
+          {showConsent && <ConsentDialog onClose={() => setShowConsent(false)} />}
 
           {/* Public Verifier CTA */}
           <div className="mt-10 pt-8 hair">

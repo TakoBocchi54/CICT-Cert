@@ -26,7 +26,7 @@ export function walletConsentMessage(studentID, nonce, issuedAt) {
     "",
     "I link this wallet to my CICT-Cert account and agree to receive my CICT seminar certificates at it",
     "as non-transferable tokens on Polygon Amoy.",
-    "Each certificate is issued under the name shown for it in my student portal.",
+    "Each certificate is issued under my name as recorded by CICT.",
     "CICT may mark a certificate as revoked. I cannot transfer or remove a certificate.",
     "This signature does not send a blockchain transaction or authorize spending.",
     "",
