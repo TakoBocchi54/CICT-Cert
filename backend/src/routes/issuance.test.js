@@ -127,15 +127,15 @@ test("batch issuance with PostgreSQL and a local Amoy RPC fixture", { skip }, as
     assert.equal(confirmed.status, 200, JSON.stringify(confirmed));
     assert.equal(confirmed.data.transactionStatus, "CONFIRMED"); assert.equal(confirmed.data.issued, 3); assert.equal(confirmed.data.batchId, "1");
     const rows = (await rowsOf(pending.seminarID)).slice(0, 3);
-    assert.deepEqual(rows.map(row => row.tokenID), ["1", "2", "3"], "tokens follow certificate-number order");
-    assert.ok(rows.every(row => row.status === "ISSUED" && row.issuedAt && row.transactionStatus === "CONFIRMED" && row.blockNum === "10" && row.requestedBy === "1"));
+    assert.deepEqual(rows.map(row => row.tokenID), [1, 2, 3], "tokens follow certificate-number order");
+    assert.ok(rows.every(row => row.status === "ISSUED" && row.issuedAt && row.transactionStatus === "CONFIRMED" && row.blockNum === 10 && row.requestedBy === 1));
     const sends = chain.sendCount;
     assert.equal((await issue(pending.seminarID)).status, 409); assert.equal(chain.sendCount, sends);
   });
 
   await t.test("students see their token and can download a Merkle inclusion proof that anyone can check", async () => {
     const visible = (await send("GET", "/student/certificates", student1)).data.find(row => row.certificateID === pending.certificates[0].certificateID);
-    assert.equal(visible.tokenID, "1"); assert.equal(visible.transactionHash, pendingHash); assert.equal(visible.status, "ISSUED");
+    assert.equal(visible.tokenID, 1); assert.equal(visible.transactionHash, pendingHash); assert.equal(visible.status, "ISSUED");
     assert.equal("signedTransaction" in visible, false);
     const { status, data } = await send("GET", `/student/certificates/${visible.certificateID}/proof`, student1);
     assert.equal(status, 200, JSON.stringify(data));
@@ -164,7 +164,7 @@ test("batch issuance with PostgreSQL and a local Amoy RPC fixture", { skip }, as
     assert.equal(second.data.remaining, 0); assert.notEqual(second.data.transactionHash, first.data.transactionHash);
     amoy.mine(second.data.transactionHash);
     assert.equal((await check(seminarID)).data.issued, 1);
-    assert.deepEqual((await rowsOf(seminarID)).map(row => [row.status, row.tokenID]), [["ISSUED", "4"], ["ISSUED", "5"], ["ISSUED", "6"]]);
+    assert.deepEqual((await rowsOf(seminarID)).map(row => [row.status, row.tokenID]), [["ISSUED", 4], ["ISSUED", 5], ["ISSUED", 6]]);
     delete process.env.ISSUE_BATCH_SIZE;
   });
 

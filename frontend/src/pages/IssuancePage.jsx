@@ -42,7 +42,7 @@ export default function IssuancePage({ onNavigateRegistry }) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   // No seminar is selected by default; ?seminar=<id> (dashboard buttons) preselects one.
-  const [selectedId, setSelectedId] = useState(() => new URLSearchParams(window.location.search).get('seminar') || '');
+  const [selectedId, setSelectedId] = useState(() => Number(new URLSearchParams(window.location.search).get('seminar')) || '');
   const [step, setStep] = useState(null);
   const [attendanceResult, setAttendanceResult] = useState(null);
   const [editing, setEditing] = useState(false);

@@ -155,12 +155,12 @@ async function reconcile(client, seminarID, transactionHash, context) {
   const first = batch?.args.firstTokenId;
   // Token ID = first token + batch position; each must have been minted to that certificate's wallet.
   if (!batch || batch.args.seminarId !== BigInt(seminarID) || batch.args.root !== root || first < 1n ||
-      first + BigInt(rows.length) > 9223372036854775807n || batch.args.certHashes.length !== rows.length ||
+      first + BigInt(rows.length) > 2147483647n || batch.args.certHashes.length !== rows.length ||
       rows.some((row, i) => batch.args.certHashes[i] !== row.certificateHash || minted.get(first + BigInt(i)) !== row.walletAddress.toLowerCase())) {
     throw new IssuanceError(409, "The receipt has no matching batch issuance event. Contact CICT.");
   }
   await client.query(`UPDATE blockchain_record b SET "transactionStatus" = 'CONFIRMED', "blockNum" = $2, "tokenID" = v.token
-    FROM unnest($3::bigint[], $4::bigint[]) AS v(id, token)
+    FROM unnest($3::int[], $4::int[]) AS v(id, token)
     WHERE b."transactionHash" = $1 AND b."transactionType" = 'MINT' AND b."certificateID" = v.id`,
     [transactionHash, receipt.blockNumber.toString(), ids, rows.map((_, i) => (first + BigInt(i)).toString())]);
   await client.query(`UPDATE certificate SET status = 'ISSUED', "issuedAt" = $2 WHERE "certificateID" = ANY($1)`,
@@ -193,15 +193,15 @@ export async function issueSeminarBatch(seminarID, faculty, allowNew = true) {
     const hashes = batch.map(row => certificateHash(row, context));
     const signedTransaction = await signIssuerCall(account, context, "issueBatch", [BigInt(seminarID), merkleRoot(hashes), wallets, hashes], "mint");
     // A hash left by a failed attempt is cleared before it is replaced: the trigger freezes hashed facts while one is set.
-    await client.query(`UPDATE certificate c SET "certificateHash" = NULL FROM unnest($1::bigint[], $2::text[]) AS v(id, hash)
+    await client.query(`UPDATE certificate c SET "certificateHash" = NULL FROM unnest($1::int[], $2::text[]) AS v(id, hash)
       WHERE c."certificateID" = v.id AND c."certificateHash" IS NOT NULL AND c."certificateHash" <> v.hash`, [ids, hashes]);
     await client.query(`UPDATE certificate c SET "studentWalletID" = w."studentWalletID", "certificateHash" = v.hash, "authorizedBy" = $3, status = 'PENDING'
-      FROM unnest($1::bigint[], $2::text[]) AS v(id, hash), student_wallet w
+      FROM unnest($1::int[], $2::text[]) AS v(id, hash), student_wallet w
       WHERE c."certificateID" = v.id AND w."studentID" = c."studentID"`, [ids, hashes, faculty.facultyID]);
     await client.query(`INSERT INTO blockchain_record ("certificateID", "transactionType", "transactionHash", "signedTransaction",
       "requestedBy", "contractAddress", "fromAddress", "toAddress", network, "transactionStatus")
       SELECT v.id, 'MINT', $3::text, CASE WHEN v.n = 1 THEN $4::text END, $5, $6, $7, v.wallet, 'polygon-amoy', 'PENDING'
-      FROM unnest($1::bigint[], $2::text[]) WITH ORDINALITY AS v(id, wallet, n)`,
+      FROM unnest($1::int[], $2::text[]) WITH ORDINALITY AS v(id, wallet, n)`,
       [ids, wallets, keccak256(signedTransaction), signedTransaction, faculty.facultyID, context.contractAddress, context.issuerAddress]);
     await client.query("COMMIT");
     // Broadcasting only starts after the hash and signed payload are durable.

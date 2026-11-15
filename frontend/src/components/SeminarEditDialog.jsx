@@ -11,7 +11,7 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   const dialog = useRef(null);
   const [title, setTitle] = useState(seminar.seminarTitle);
   const [date, setDate] = useState(seminar.seminarDate);
-  const [templateID, setTemplateID] = useState(seminar.templateID ?? '');
+  const [templateID, setTemplateID] = useState(String(seminar.templateID ?? ''));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const locked = seminar.certificateCount > 0;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] });
@@ -27,7 +27,7 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
     onSuccess: async () => { await refresh(); onDeleted(); },
   });
   const busy = save.isPending || remove.isPending;
-  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate && templateID === (seminar.templateID ?? '');
+  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate && templateID === String(seminar.templateID ?? '');
   const [heading, icon, tone] = locked ? ['Seminar locked', 'ph-lock-simple', 'bg-paper-2 text-ink-muted']
     : confirmingDelete ? ['Delete this seminar?', 'ph-warning', 'bg-revoked-bg text-revoked']
     : ['Edit seminar', 'ph-pencil-simple', 'bg-paper-2 text-forest'];

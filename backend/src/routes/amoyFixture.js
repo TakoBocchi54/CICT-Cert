@@ -57,7 +57,7 @@ export async function preparedSeminar(db, studentIDs, { absent = [] } = {}) {
   for (const studentID of studentIDs) {
     await db.query(`INSERT INTO seminar_registration ("seminarID","studentID",attended) VALUES ($1,$2,$3)`, [seminar.seminarID, studentID, !absent.includes(studentID)]);
     certificates.push((await db.query(`INSERT INTO certificate ("studentID","seminarID","studentWalletID","issuerWalletID","authorizedBy","recipientName","seminarTitle","seminarDate")
-      SELECT $1::bigint,$2,(SELECT "studentWalletID" FROM student_wallet WHERE "studentID"=$1::bigint),1,1,'Student ' || $1::text,'Web Security','2026-11-09'
+      SELECT $1::int,$2,(SELECT "studentWalletID" FROM student_wallet WHERE "studentID"=$1::int),1,1,'Student ' || $1::text,'Web Security','2026-11-09'
       RETURNING "certificateID","certificateNo"`, [studentID, seminar.seminarID])).rows[0]);
   }
   return { seminarID: seminar.seminarID, certificates };

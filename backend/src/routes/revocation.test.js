@@ -63,7 +63,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     }
     const lookup = await request(String(certificate.no), { session: assistant });
     assert.equal(lookup.status, 200);
-    assert.equal(lookup.data.tokenID, certificate.tokenID.toString()); assert.equal(lookup.data.status, "ISSUED");
+    assert.equal(lookup.data.tokenID, Number(certificate.tokenID)); assert.equal(lookup.data.status, "ISSUED");
     assert.equal(lookup.data.recipientName, "Juan Dela Cruz"); assert.equal(lookup.data.revocation.transactionStatus, null);
     assert.equal("certificateID" in lookup.data, false);
     assert.equal((await revoke(certificate, "x", assistant)).status, 403);
@@ -95,8 +95,8 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     assert.equal(response.status, 200, JSON.stringify(response));
     assert.equal(response.data.transactionStatus, "PENDING"); assert.match(response.data.warning, /no new revocation/);
     const [record] = await revokeRecords(pending.id);
-    assert.equal(record.revocationReason, "Wrong seminar date"); assert.equal(record.requestedBy, "1");
-    assert.equal(record.tokenID, pending.tokenID.toString()); assert.equal(record.toAddress, wallet);
+    assert.equal(record.revocationReason, "Wrong seminar date"); assert.equal(record.requestedBy, 1);
+    assert.equal(record.tokenID, Number(pending.tokenID)); assert.equal(record.toAddress, wallet);
     assert.equal((await certificateRow(pending.id)).status, "ISSUED");
     assert.equal(chain.persistedBeforeSend, true);
   });
@@ -120,7 +120,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     const stored = await certificateRow(pending.id);
     assert.equal(stored.status, "REVOKED"); assert.ok(stored.revokedAt);
     const [saved] = await revokeRecords(pending.id);
-    assert.equal(saved.transactionStatus, "CONFIRMED"); assert.equal(saved.blockNum, "10");
+    assert.equal(saved.transactionStatus, "CONFIRMED"); assert.equal(saved.blockNum, 10);
     assert.equal(chain.revocationRoot, smtRoot([pending.tokenID]));
     const sends = chain.sendCount;
     assert.equal((await revoke(pending)).data.status, "REVOKED"); assert.equal(chain.sendCount, sends);
@@ -193,7 +193,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     const row = (await db.query(`SELECT "seminarID","studentID","studentWalletID","authorizedBy","certificateHash" FROM certificate WHERE "certificateNo"=$1`,
       [created.data.certificateNo])).rows[0];
     assert.deepEqual({ ...row }, { ...(await db.query(`SELECT "seminarID","studentID" FROM certificate WHERE "certificateID"=$1`, [original.id])).rows[0],
-      studentWalletID: "1", authorizedBy: "1", certificateHash: null });
+      studentWalletID: 1, authorizedBy: 1, certificateHash: null });
     assert.equal(chain.sendCount, sends, "preparing a replacement sends no transaction");
     assert.deepEqual((await request(String(original.no))).data.replacement, { certificateNo: created.data.certificateNo, status: "PENDING" });
     assert.match((await replace(original)).data.error, new RegExp(`No\\. ${created.data.certificateNo}`));

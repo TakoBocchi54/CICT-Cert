@@ -50,7 +50,7 @@ router.get("/certificates/verify/:certHash", async (req, res) => {
 
         res.json({
             status: ["NotFound", "Valid", "Revoked"][record.status],
-            tokenId: record.tokenID ?? "0",
+            tokenId: String(record.tokenID ?? 0),
             batchId: (record.batchId ?? 0n).toString(),
             recipient: record.recipient ?? "0x0000000000000000000000000000000000000000",
             issuedAt: (record.issuedAt ?? 0n).toString(),

@@ -8,7 +8,7 @@ const router = Router();
 router.use("/faculty/certificates", requireFaculty, requireActiveFaculty);
 
 router.param("certificateNo", (req, res, next, value) => {
-  if (!/^[1-9]\d{0,18}$/.test(value) || BigInt(value) > 9223372036854775807n) {
+  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
     return res.status(400).json({ error: "Invalid certificate number." });
   }
   next();
@@ -45,7 +45,7 @@ router.get("/faculty/certificates", async (req, res) => {
 // Batch revocation: one transaction for every listed certificate. Registered before :certificateNo.
 router.post(["/faculty/certificates/revoke", "/faculty/certificates/revocation/check"], requireCanIssue, async (req, res) => {
   const numbers = req.body?.certificateNos;
-  if (!Array.isArray(numbers) || numbers.some(value => !/^[1-9]\d{0,18}$/.test(String(value)) || BigInt(value) > 9223372036854775807n)) {
+  if (!Array.isArray(numbers) || numbers.some(value => !/^[1-9]\d{0,9}$/.test(String(value)) || BigInt(value) > 2147483647n)) {
     return res.status(400).json({ error: "Choose the certificates to revoke." });
   }
   res.json(await revokeCertificates(numbers.map(String), req.faculty, req.body.reason, req.path.endsWith("/revoke")));

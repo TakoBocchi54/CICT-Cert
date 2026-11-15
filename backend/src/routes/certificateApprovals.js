@@ -22,7 +22,7 @@ router.use("/student/certificates", requireStudent, async (req, res, next) => {
 });
 
 router.param("certificateID", (_req, res, next, value) => {
-  if (!/^[1-9]\d{0,18}$/.test(value) || BigInt(value) > 9223372036854775807n) {
+  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
     return res.status(400).json({ error: "Invalid certificate ID." });
   }
   next();
@@ -68,14 +68,14 @@ router.get("/student/certificates/:certificateID/proof", async (req, res) => {
     // keccak256 of this JSON, exactly as written (same key order, no spaces), is certificateHash.
     certificate: certificatePayload(certificate, { chainId: polygonAmoy.id, contractAddress, issuerAddress: certificate.issuerAddress }),
     certificateHash: certificate.certificateHash,
-    tokenId: proof.tokenID,
+    tokenId: String(proof.tokenID),
     // leaf = keccak256(abi.encode(uint256 index, bytes32 certificateHash)); pairs are hashed in sorted order.
     index: proof.index,
     leaf: merkleLeaf(proof.index, certificate.certificateHash),
     merkleProof: proof.merkleProof,
     merkleRoot: proof.merkleRoot,
     transactionHash: proof.transactionHash,
-    blockNumber: proof.blockNum,
+    blockNumber: String(proof.blockNum),
     verify: "Call verify(tokenId, certificateHash, merkleProof, smtBitmap, smtSiblings) on the contract, or batchOf(recordOf(tokenId).batchId).root to compare merkleRoot.",
   });
 });

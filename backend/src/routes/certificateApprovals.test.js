@@ -103,7 +103,7 @@ test("certificate preparation and student certificate list HTTP endpoints", { sk
     const { rows } = await db.query(`SELECT * FROM certificate ORDER BY "studentID"`);
     assert.equal(rows.length, 2); [id, id2] = rows.map(row => row.certificateID);
     assert.equal(rows[0].recipientName, "Juan Dela Cruz"); assert.equal(rows[0].seminarTitle, "Web Security");
-    assert.equal(rows[0].authorizedBy, "1"); assert.equal(rows[1].studentWalletID, null);
+    assert.equal(rows[0].authorizedBy, 1); assert.equal(rows[1].studentWalletID, null);
     assert.notEqual(rows[0].certificateNo, rows[1].certificateNo);
     assert.ok(rows.every(row => row.status === "PENDING" && !row.issuedAt && !row.certificateHash));
   });
@@ -116,7 +116,7 @@ test("certificate preparation and student certificate list HTTP endpoints", { sk
     assert.equal("consentSignature" in mine.data[0], false);
     const other = await request("/student/certificates", student2);
     assert.equal(other.data.length, 1); assert.equal(other.data[0].certificateID, id2); assert.equal(other.data[0].walletAddress, null);
-    for (const value of ["0", "abc", "9223372036854775808"]) assert.equal((await request(`/student/certificates/${value}/proof`)).status, 400);
+    for (const value of ["0", "abc", "2147483648"]) assert.equal((await request(`/student/certificates/${value}/proof`)).status, 400);
     assert.equal((await request(`/student/certificates/${id}/proof`)).status, 404, "nothing to prove before issuance");
     const list = await request("/faculty/seminars/1/certificates", assistant);
     assert.equal(list.data.length, 2); assert.equal("consentedAt" in list.data[0], false);

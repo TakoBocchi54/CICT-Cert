@@ -84,7 +84,9 @@ for (const migrated of [false, true]) {
         await assert.rejects(client.query(await sql("migrations/007_merkle_batches.sql")), /resetTestData/);
         await client.query("ROLLBACK");
         await client.query(`TRUNCATE student_wallet, certificate, blockchain_record RESTART IDENTITY`);
+        await client.query(await sql("migrations/006_certificate_templates.sql"));
         await client.query(await sql("migrations/007_merkle_batches.sql"));
+        await client.query(await sql("migrations/008_integer_ids.sql"));
         await client.query(wallets);
       }
       await client.query("BEGIN");
@@ -100,7 +102,7 @@ for (const migrated of [false, true]) {
       assert.equal(pending.issuedAt, null);
       assert.equal(Object.hasOwn(pending, "createdAt"), false);
       assert.equal(Object.hasOwn(pending, "replacesCertificateID"), false);
-      assert.equal(pending.certificateNo, "2"); // Sequences also advance for rejected inserts.
+      assert.equal(pending.certificateNo, 2); // Sequences also advance for rejected inserts.
       await rejectsSQL(client, `INSERT INTO certificate ${draft}`, /uq_certificate_active_registration/);
       const id = pending.certificateID;
       await rejectsSQL(client, `UPDATE certificate SET "studentWalletID" = 2 WHERE "certificateID" = ${id}`, /fk_certificate_student_wallet_match/);

@@ -20,7 +20,7 @@ const CERTIFICATES = `
   LEFT JOIN LATERAL (SELECT "tokenID", "contractAddress", "transactionHash" FROM blockchain_record
     WHERE "certificateID" = c."certificateID" AND "transactionType" = 'MINT' AND "transactionStatus" = 'CONFIRMED'
     ORDER BY "transactionID" DESC LIMIT 1) m ON true
-  WHERE c."certificateNo" = ANY($1::bigint[]) ORDER BY c."certificateNo"`;
+  WHERE c."certificateNo" = ANY($1::int[]) ORDER BY c."certificateNo"`;
 
 const latestRevocation = (db, certificateID) => db.query(`SELECT * FROM blockchain_record WHERE "certificateID" = $1
   AND "transactionType" = 'REVOKE' ORDER BY "transactionID" DESC LIMIT 1`, [certificateID]).then(r => r.rows[0]);
@@ -93,7 +93,7 @@ export async function revokeCertificates(certificateNos, faculty, reason, allowN
     await client.query("BEGIN");
     // Same seminar row locks as attendance import and issuance, taken in ID order so two batches cannot deadlock.
     const found = await client.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" IN (
-      SELECT "seminarID" FROM certificate WHERE "certificateNo" = ANY($1::bigint[])) ORDER BY "seminarID" FOR UPDATE`, [numbers]);
+      SELECT "seminarID" FROM certificate WHERE "certificateNo" = ANY($1::int[])) ORDER BY "seminarID" FOR UPDATE`, [numbers]);
     const load = async () => {
       const { rows } = await client.query(CERTIFICATES + ` FOR UPDATE OF c`, [numbers]);
       for (const row of rows) row.attempt = await latestRevocation(client, row.certificateID);
@@ -130,7 +130,7 @@ export async function revokeCertificates(certificateNos, faculty, reason, allowN
     await client.query(`INSERT INTO blockchain_record ("certificateID", "transactionType", "transactionHash", "signedTransaction",
       "requestedBy", "revocationReason", "tokenID", "contractAddress", "fromAddress", "toAddress", network, "transactionStatus")
       SELECT v.id, 'REVOKE', $4::text, CASE WHEN v.n = 1 THEN $5::text END, $6, $7, v.token, $8, $9, v.wallet, 'polygon-amoy', 'PENDING'
-      FROM unnest($1::bigint[], $2::bigint[], $3::text[]) WITH ORDINALITY AS v(id, token, wallet, n)`,
+      FROM unnest($1::int[], $2::int[], $3::text[]) WITH ORDINALITY AS v(id, token, wallet, n)`,
       [batch.map(certificate => certificate.certificateID), batch.map(certificate => certificate.tokenID), batch.map(certificate => certificate.walletAddress),
         keccak256(signedTransaction), signedTransaction, faculty.facultyID, reason, context.contractAddress, context.issuerAddress]);
     await client.query("COMMIT");

@@ -2,7 +2,7 @@
 BEGIN;
 
 CREATE TABLE users (
-    "userID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "userID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "email" VARCHAR(255) NOT NULL UNIQUE,
     -- Students log in through the embedded wallet, so they have no password.
     "passwordHash" VARCHAR(255),
@@ -15,8 +15,8 @@ CREATE TABLE users (
 );
 
 CREATE TABLE cict_faculty (
-    "facultyID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "userID" BIGINT NOT NULL UNIQUE,
+    "facultyID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "userID" INTEGER NOT NULL UNIQUE,
     "firstName" VARCHAR(255) NOT NULL,
     "lastName" VARCHAR(255) NOT NULL,
     "canIssue" BOOLEAN NOT NULL DEFAULT FALSE,
@@ -26,8 +26,8 @@ CREATE TABLE cict_faculty (
 );
 
 CREATE TABLE student (
-    "studentID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "userID" BIGINT NOT NULL UNIQUE,
+    "studentID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "userID" INTEGER NOT NULL UNIQUE,
     "fullName" VARCHAR(255) NOT NULL,
     "program" VARCHAR(255) NOT NULL,
     CONSTRAINT fk_student_user
@@ -36,8 +36,8 @@ CREATE TABLE student (
 );
 
 CREATE TABLE student_wallet (
-    "studentWalletID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "studentID" BIGINT NOT NULL UNIQUE,
+    "studentWalletID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "studentID" INTEGER NOT NULL UNIQUE,
     "studentWalletAddress" VARCHAR(42) NOT NULL UNIQUE,
     -- The wallet-link message the student signed. It carries their standing consent to receive
     -- certificates at this wallet; "createdAt" is when it was given.
@@ -52,7 +52,7 @@ CREATE TABLE student_wallet (
 );
 
 CREATE TABLE issuer_wallet (
-    "issuerWalletID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "issuerWalletID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "issuerWalletAddress" VARCHAR(42) NOT NULL UNIQUE,
     "label" VARCHAR(100) NOT NULL,
     "network" VARCHAR(100) NOT NULL,
@@ -62,21 +62,21 @@ CREATE TABLE issuer_wallet (
 
 -- Faculty-uploaded certificate designs. Rendering only: the certificate hash never includes the template.
 CREATE TABLE certificate_template (
-    "templateID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "templateID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "name" VARCHAR(100) NOT NULL CHECK (btrim("name") <> ''),
     "image" BYTEA NOT NULL,
     "imageType" VARCHAR(20) NOT NULL CHECK ("imageType" IN ('image/png', 'image/jpeg')),
     "imageWidth" INTEGER NOT NULL CHECK ("imageWidth" > 0),
     "imageHeight" INTEGER NOT NULL CHECK ("imageHeight" > 0),
     "fields" JSONB NOT NULL,
-    "createdBy" BIGINT NOT NULL REFERENCES cict_faculty ("facultyID"),
+    "createdBy" INTEGER NOT NULL REFERENCES cict_faculty ("facultyID"),
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE certificate_template_signature (
-    "signatureID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "templateID" BIGINT NOT NULL REFERENCES certificate_template ("templateID") ON DELETE CASCADE,
+    "signatureID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "templateID" INTEGER NOT NULL REFERENCES certificate_template ("templateID") ON DELETE CASCADE,
     "image" BYTEA NOT NULL,
     "imageType" VARCHAR(20) NOT NULL CHECK ("imageType" IN ('image/png', 'image/jpeg')),
     "imageWidth" INTEGER NOT NULL CHECK ("imageWidth" > 0),
@@ -84,37 +84,37 @@ CREATE TABLE certificate_template_signature (
 );
 
 CREATE TABLE seminar (
-    "seminarID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "seminarID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     "seminarTitle" VARCHAR(255) NOT NULL CHECK (btrim("seminarTitle") <> ''),
     "seminarDate" DATE NOT NULL,
-    "createdBy" BIGINT NOT NULL REFERENCES cict_faculty ("facultyID"),
+    "createdBy" INTEGER NOT NULL REFERENCES cict_faculty ("facultyID"),
     -- NULL = built-in design.
-    "templateID" BIGINT REFERENCES certificate_template ("templateID") ON DELETE SET NULL,
+    "templateID" INTEGER REFERENCES certificate_template ("templateID") ON DELETE SET NULL,
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE seminar_registration (
-    "seminarID" BIGINT NOT NULL REFERENCES seminar ("seminarID"),
-    "studentID" BIGINT NOT NULL REFERENCES student ("studentID"),
+    "seminarID" INTEGER NOT NULL REFERENCES seminar ("seminarID"),
+    "studentID" INTEGER NOT NULL REFERENCES student ("studentID"),
     "attended" BOOLEAN NOT NULL DEFAULT FALSE,
     "registeredAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY ("seminarID", "studentID")
 );
 
-CREATE SEQUENCE certificate_number_seq;
+CREATE SEQUENCE certificate_number_seq AS INTEGER;
 
 CREATE TABLE certificate (
-    "certificateID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "certificateNo" BIGINT NOT NULL DEFAULT nextval('certificate_number_seq') UNIQUE,
-    "studentID" BIGINT NOT NULL,
-    "studentWalletID" BIGINT,
-    "authorizedBy" BIGINT,
-    "issuerWalletID" BIGINT NOT NULL,
+    "certificateID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "certificateNo" INTEGER NOT NULL DEFAULT nextval('certificate_number_seq') UNIQUE,
+    "studentID" INTEGER NOT NULL,
+    "studentWalletID" INTEGER,
+    "authorizedBy" INTEGER,
+    "issuerWalletID" INTEGER NOT NULL,
     "recipientName" VARCHAR(255) NOT NULL,
     "seminarTitle" VARCHAR(255) NOT NULL,
     "seminarDate" DATE NOT NULL,
     "certificateHash" VARCHAR(66),
-    "seminarID" BIGINT NOT NULL,
+    "seminarID" INTEGER NOT NULL,
     "status" VARCHAR(20) NOT NULL DEFAULT 'PENDING'
         CHECK ("status" IN ('PENDING', 'ISSUED', 'REVOKED', 'FAILED')),
     "issuedAt" TIMESTAMPTZ,
@@ -137,22 +137,22 @@ CREATE TABLE certificate (
 );
 
 CREATE TABLE blockchain_record (
-    "transactionID" BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    "certificateID" BIGINT NOT NULL,
+    "transactionID" INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    "certificateID" INTEGER NOT NULL,
     "transactionType" VARCHAR(10) NOT NULL
         CHECK ("transactionType" IN ('MINT', 'REVOKE')),
     -- One row per certificate: every row of a batch carries the same transaction hash.
     "transactionHash" VARCHAR(66),
     -- Saved on the batch's first row only (lowest "transactionID").
     "signedTransaction" TEXT,
-    "requestedBy" BIGINT NOT NULL,
+    "requestedBy" INTEGER NOT NULL,
     "revocationReason" TEXT,
-    "tokenID" BIGINT,
+    "tokenID" INTEGER,
     "contractAddress" VARCHAR(42),
     "fromAddress" VARCHAR(42),
     "toAddress" VARCHAR(42),
     "network" VARCHAR(50) NOT NULL,
-    "blockNum" BIGINT,
+    "blockNum" INTEGER,
     "transactionStatus" VARCHAR(20) NOT NULL
         CHECK ("transactionStatus" IN ('PENDING', 'CONFIRMED', 'FAILED')),
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

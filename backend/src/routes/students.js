@@ -56,7 +56,7 @@ router.post("/faculty/students", async (req, res) => {
 // no certificate can be removed; their attendance rows go with them.
 router.delete("/faculty/students/:studentID", requireCanIssue, async (req, res) => {
   const id = req.params.studentID;
-  if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.status(400).json({ error: "Invalid student ID." });
+  if (!/^[1-9]\d{0,9}$/.test(id) || BigInt(id) > 2147483647n) return res.status(400).json({ error: "Invalid student ID." });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

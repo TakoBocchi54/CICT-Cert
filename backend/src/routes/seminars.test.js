@@ -88,7 +88,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
   await t.test("faculty can create a seminar without issuance permission; creator comes from the session", async () => {
     const result = await request("POST", "", { seminarTitle: "  Web Security  ", seminarDate: "2028-02-29", createdBy: "1" });
     assert.equal(result.status, 201);
-    assert.equal(result.data.createdBy, "2");
+    assert.equal(result.data.createdBy, 2);
     assert.equal(result.data.seminarTitle, "Web Security");
     assert.equal(result.data.seminarDate, "2028-02-29");
     seminarID = result.data.seminarID;
@@ -97,7 +97,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     assert.equal(list.data[0].registrationCount, 0);
   });
   await t.test("invalid or unknown seminar IDs are rejected", async () => {
-    for (const id of ["0", "abc", "9223372036854775808"]) {
+    for (const id of ["0", "abc", "2147483648"]) {
       assert.equal((await request("GET", "/" + id + "/registrations")).status, 400);
     }
     assert.equal((await request("GET", "/999999/registrations")).status, 404);
@@ -185,7 +185,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const result = await saveAttendance(attendanceCSV, preview.data.previewHash);
     assert.equal(result.status, 200);
     assert.deepEqual(result.data, { attended: 2, markedAttended: 2, markedAbsent: 0, awaitingWallet: 1, duplicatesSkipped: 1 });
-    assert.deepEqual(await savedAttendance(), [{ studentID: "1", attended: true }, { studentID: "2", attended: true }]);
+    assert.deepEqual(await savedAttendance(), [{ studentID: 1, attended: true }, { studentID: 2, attended: true }]);
     assert.deepEqual((await db.query(`SELECT "seminarID", "studentID", "attended" FROM seminar_registration WHERE "seminarID" <> $1 ORDER BY "seminarID", "studentID"`, [attendanceID])).rows, otherSeminars);
     const list = await request();
     assert.equal(list.data.find(row => row.seminarID === attendanceID).attendanceCount, 2);

@@ -11,7 +11,7 @@ const router = Router();
 router.use("/faculty/seminars", requireFaculty, requireActiveFaculty);
 
 router.param("seminarID", (req, res, next, value) => {
-  if (!/^[1-9]\d{0,18}$/.test(value) || BigInt(value) > 9223372036854775807n) {
+  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
     return res.status(400).json({ error: "Invalid seminar ID." });
   }
   next();
@@ -58,7 +58,7 @@ function readSeminarFields(body) {
   }
   // Certificate design: null (or absent) = built-in; otherwise an existing template's ID.
   const templateID = body?.templateID ?? null;
-  if (templateID !== null && (typeof templateID !== "string" || !/^[1-9]\d{0,18}$/.test(templateID))) {
+  if (templateID !== null && (!["string", "number"].includes(typeof templateID) || !/^[1-9]\d{0,9}$/.test(String(templateID)) || BigInt(templateID) > 2147483647n)) {
     return { error: "Choose a valid certificate design." };
   }
   return { title, date, templateID };
@@ -118,7 +118,7 @@ router.patch("/faculty/seminars/:seminarID", async (req, res) => {
       throw new IssuanceError(400, MISSING_TEMPLATE);
     }
     return (await client.query(
-      `UPDATE seminar SET "seminarTitle" = $2, "seminarDate" = $3, "templateID" = CASE WHEN $5 THEN "templateID" ELSE $4::bigint END
+      `UPDATE seminar SET "seminarTitle" = $2, "seminarDate" = $3, "templateID" = CASE WHEN $5 THEN "templateID" ELSE $4::int END
        WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
       [req.params.seminarID, title, date, templateID, keepTemplate])).rows[0];
   });
@@ -258,12 +258,12 @@ router.post(["/faculty/seminars/:seminarID/attendance/preview", "/faculty/semina
     const ids = [...matched.keys()];
     await client.query(
       `INSERT INTO seminar_registration ("seminarID", "studentID", "attended")
-       SELECT $1, unnest($2::bigint[]), true ORDER BY 2
+       SELECT $1, unnest($2::int[]), true ORDER BY 2
        ON CONFLICT ("seminarID", "studentID") DO UPDATE SET "attended" = true WHERE seminar_registration."attended" IS DISTINCT FROM true`,
       [req.params.seminarID, ids],
     );
     await client.query(
-      `UPDATE seminar_registration SET "attended" = false WHERE "seminarID" = $1 AND "attended" AND NOT ("studentID" = ANY($2::bigint[]))`,
+      `UPDATE seminar_registration SET "attended" = false WHERE "seminarID" = $1 AND "attended" AND NOT ("studentID" = ANY($2::int[]))`,
       [req.params.seminarID, ids],
     );
     await client.query("COMMIT");
@@ -346,7 +346,7 @@ router.post(["/faculty/seminars/:seminarID/certificates/issue", "/faculty/semina
 // Name correction before issuance.
 router.patch("/faculty/seminars/:seminarID/certificates/:certificateID", requireCanIssue, async (req, res) => {
   const id = req.params.certificateID;
-  if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) return res.status(400).json({ error: "Invalid certificate ID." });
+  if (!/^[1-9]\d{0,9}$/.test(id) || BigInt(id) > 2147483647n) return res.status(400).json({ error: "Invalid certificate ID." });
   res.json(await correctRecipientName(req.params.seminarID, id, req.body));
 });
 

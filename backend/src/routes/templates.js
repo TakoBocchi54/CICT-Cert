@@ -13,7 +13,7 @@ const signatureUpload = express.raw({ type: images, limit: SIGNATURE_IMAGE_BYTES
 
 for (const name of ["templateID", "signatureID"]) {
   router.param(name, (req, res, next, value) => {
-    if (!/^[1-9]\d{0,18}$/.test(value) || BigInt(value) > 9223372036854775807n) return res.status(400).json({ error: "Invalid ID." });
+    if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) return res.status(400).json({ error: "Invalid ID." });
     next();
   });
 }
@@ -41,7 +41,7 @@ async function listTemplates(db, facultyID, templateID = null) {
             (SELECT count(*)::int FROM seminar s WHERE s."templateID" = t."templateID") AS "seminarCount",
             EXISTS (SELECT 1 FROM certificate c JOIN seminar s ON s."seminarID" = c."seminarID" WHERE s."templateID" = t."templateID") AS "locked"
      FROM certificate_template t JOIN cict_faculty f ON f."facultyID" = t."createdBy"
-     WHERE $1::bigint IS NULL OR t."templateID" = $1 ORDER BY t."createdAt" DESC, t."templateID" DESC`, [templateID]),
+     WHERE $1::int IS NULL OR t."templateID" = $1 ORDER BY t."createdAt" DESC, t."templateID" DESC`, [templateID]),
   db.query(`SELECT "canIssue" FROM cict_faculty WHERE "facultyID" = $1`, [facultyID])]);
   return rows.map(({ template, ...row }) => ({ ...template, ...row,
     canEdit: !row.locked && (row.createdBy === String(facultyID) || faculty.rows[0]?.canIssue === true) }));
