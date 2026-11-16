@@ -1,4 +1,4 @@
-﻿import { createPublicClient, getAddress, http } from "viem";
+﻿import { createPublicClient, formatEther, getAddress, http, parseEther } from "viem";
 import { polygonAmoy } from "viem/chains";
 import abi from "../contracts/CICTCertificate.abi.json" with { type: "json" };
 import { pool } from "../db/pool.js";
@@ -78,4 +78,30 @@ export async function certificateIssuer() {
         throw new Error("Invalid issuer network or address");
     }
     return { chainId, contractAddress: address.toLowerCase(), issuerAddress: issuer.toLowerCase() };
+}
+
+// Default 0.5 POL: about two full 100-certificate batches at 25–35 gwei (≈75k gas per certificate).
+export const lowBalanceThreshold = () => {
+    const value = process.env.ISSUER_LOW_BALANCE_POL?.trim();
+    return /^\d{1,9}(\.\d{1,18})?$/.test(value ?? "") ? value : "0.5";
+};
+
+// The contract issuer's POL balance against the low-balance threshold. issuer_wallet."lowBalanceSince" records when
+// it was first seen below the threshold (the low-balance notification's time) and is cleared once it is above again.
+// Throws when the RPC fails.
+export async function issuerBalance() {
+    const { issuerAddress } = await certificateIssuer();
+    const wei = await certificateContract().client.getBalance({ address: issuerAddress });
+    const threshold = lowBalanceThreshold(), low = wei < parseEther(threshold);
+    let lowSince = null;
+    if (low) {
+        const { rows } = await pool.query(`INSERT INTO issuer_wallet ("issuerWalletAddress", label, network, "lowBalanceSince")
+            VALUES ($1, 'CICT', 'polygon-amoy', now())
+            ON CONFLICT (lower("issuerWalletAddress")) DO UPDATE SET "lowBalanceSince" = coalesce(issuer_wallet."lowBalanceSince", now())
+            RETURNING "lowBalanceSince"`, [issuerAddress]);
+        lowSince = rows[0].lowBalanceSince;
+    } else {
+        await pool.query(`UPDATE issuer_wallet SET "lowBalanceSince" = NULL WHERE lower("issuerWalletAddress") = $1 AND "lowBalanceSince" IS NOT NULL`, [issuerAddress]);
+    }
+    return { address: issuerAddress, balance: formatEther(wei), threshold, low, lowSince };
 }

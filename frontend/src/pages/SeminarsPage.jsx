@@ -85,7 +85,8 @@ const SectionHead = ({ id, icon, title, count }) => (
 
 // Seminars are created here; their attendance and certificates are shown read-only. Ticking attendance and issuing happen in the Issue tab.
 export default function SeminarsPage() {
-  const [selectedId, setSelectedId] = useState(null);
+  // ?seminar=<id> (notification links) preselects a seminar.
+  const [selectedId, setSelectedId] = useState(() => Number(new URLSearchParams(window.location.search).get('seminar')) || null);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const seminars = useQuery({ queryKey: ['faculty-seminars'], queryFn: () => api('/api/faculty/seminars'), retry: false });

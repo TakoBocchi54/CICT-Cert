@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { formatEther } from "viem";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { pool } from "../db/pool.js";
 import { IssuanceError } from "../services/issuance.js";
-import { certificateContract, certificateIssuer } from "../services/certificates.js";
+import { issuerBalance } from "../services/certificates.js";
 import { findCertificate, prepareReplacement, revokeCertificates } from "../services/revocation.js";
 
 const router = Router();
@@ -27,12 +26,12 @@ router.get("/faculty/certificates/summary", async (_req, res) => {
   res.json({ ...counts.rows[0], recentIssued: issued.rows, recentRevoked: revoked.rows });
 });
 
-// The contract's issuer wallet and its POL balance, which pays the gas for issuing and revoking.
+// The contract's issuer wallet and its POL balance, which pays the gas for issuing and revoking,
+// with the low-balance warning level (ISSUER_LOW_BALANCE_POL, default 0.5).
 router.get("/faculty/certificates/issuer-wallet", async (_req, res) => {
   try {
-    const { issuerAddress } = await certificateIssuer();
-    const balance = await certificateContract().client.getBalance({ address: issuerAddress });
-    res.json({ address: issuerAddress, balance: formatEther(balance) });
+    const { address, balance, threshold, low } = await issuerBalance();
+    res.json({ address, balance, threshold, low });
   } catch {
     res.status(503).json({ error: "Could not read the issuer wallet balance. Check the backend's Amoy RPC and contract settings." });
   }

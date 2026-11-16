@@ -177,7 +177,9 @@ export default function FacultyDashboardPage({
 // POL in the issuer wallet pays the gas for every issue and revoke transaction. Sized like a large button.
 function IssuerWallet({ query }) {
   const { data, error, isPending } = query;
-  const look = 'rise inline-flex items-center gap-2.5 rounded-xl border border-[var(--line)] bg-white px-7 py-3.5 text-base font-semibold';
+  const low = data?.low;
+  const look = 'rise inline-flex items-center gap-2.5 rounded-xl border px-7 py-3.5 text-base font-semibold '
+    + (low ? 'border-pending/40 bg-pending-bg' : 'border-[var(--line)] bg-white');
   if (isPending || error) return (
     <div role={error ? 'alert' : 'status'} className={look + (error ? ' text-revoked' : ' text-ink-muted')} style={{ '--d': '.15s' }} title={error?.message}>
       <i className={'ph-bold ' + (error ? 'ph-warning-circle' : 'ph-wallet')} aria-hidden="true"></i>
@@ -185,12 +187,15 @@ function IssuerWallet({ query }) {
     </div>
   );
   return (
-    <a href={`https://amoy.polygonscan.com/address/${data.address}`} target="_blank" rel="noreferrer" title={data.address}
-      aria-label={`Issuer wallet balance ${data.balance} POL. View on PolygonScan (opens in a new tab)`}
+    <a href={`https://amoy.polygonscan.com/address/${data.address}`} target="_blank" rel="noreferrer"
+      title={low ? `Below the ${data.threshold} POL warning level. Top up before issuing more.` : data.address}
+      aria-label={`Issuer wallet balance ${data.balance} POL${low ? `, low: below ${data.threshold} POL` : ''}. View on PolygonScan (opens in a new tab)`}
       className={look + ' text-ink transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest'} style={{ '--d': '.15s' }}>
-      <i className="ph-bold ph-wallet text-forest" aria-hidden="true"></i>
+      <i className={'ph-bold ' + (low ? 'ph-warning text-pending' : 'ph-wallet text-forest')} aria-hidden="true"></i>
       <span className="font-normal text-ink-muted">Issuer wallet</span>
       <span className="tabular-nums">{Number(data.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })} POL</span>
+      {/* Darker than --pending so white text keeps 4.5:1. */}
+      {low && <span className="rounded-full bg-[#8a5609] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">Low</span>}
       <i className="ph-bold ph-arrow-square-out text-sm text-ink-muted" aria-hidden="true"></i>
     </a>
   );

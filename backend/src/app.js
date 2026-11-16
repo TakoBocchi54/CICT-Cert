@@ -15,6 +15,7 @@ import revocationRoutes from "./routes/revocations.js";
 import studentRoutes from "./routes/students.js";
 import templateRoutes from "./routes/templates.js";
 import registrationRoutes from "./routes/registration.js";
+import notificationRoutes from "./routes/notifications.js";
 
 const app = express();
 
@@ -36,5 +37,6 @@ app.use("/api", revocationRoutes);
 app.use("/api", studentRoutes);
 app.use("/api", templateRoutes);
 app.use("/api", registrationRoutes);
+app.use("/api", notificationRoutes);
 
 export default app;

@@ -214,7 +214,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
 
   await t.test("issuer wallet reports the contract issuer's POL balance, or 503 when the RPC is down", async () => {
     for (const session of ["", studentCookie]) assert.equal((await request("issuer-wallet", { session })).status, 401);
-    assert.deepEqual(await request("issuer-wallet"), { status: 200, data: { address: amoy.issuer.address.toLowerCase(), balance: "1" } });
+    assert.deepEqual(await request("issuer-wallet"), { status: 200, data: { address: amoy.issuer.address.toLowerCase(), balance: "1", threshold: "0.5", low: false } });
     chain.rpcFails = true;
     try { assert.equal((await request("issuer-wallet")).status, 503); } finally { chain.rpcFails = false; }
   });

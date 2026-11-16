@@ -24,6 +24,8 @@ import RegisterPage from './pages/RegisterPage';
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
+  // Pages read ?seminar= when they mount, so a notification link to the page already open remounts it.
+  const pageKey = location.pathname + (location.state?.fromNotification ? location.key : '');
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState(null);
@@ -244,7 +246,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
@@ -274,7 +276,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCollectionPage
                     certificates={studentCerts}
@@ -301,7 +303,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCertificatePage
                     certificates={studentCerts}
@@ -324,7 +326,7 @@ function AppContent() {
               <>
                 <TopNav role="faculty" view={currentView} onNavigate={handleNavigate}
                   onSignOut={handleSignOut} userName={user.name} userTitle={user.title} />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <FacultyAccountPage onProfileUpdated={account => setUser(current => ({
                     ...current,
                     name: account.firstName + ' ' + account.lastName,
@@ -349,7 +351,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <FacultyDashboardPage
                     onIssueClick={seminarID => navigate('/faculty/issue' + (seminarID ? '?seminar=' + encodeURIComponent(seminarID) : ''))}
                     onNavigateRevocation={() => navigate('/faculty/registry?status=REVOKED')}
@@ -374,7 +376,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <IssuancePage 
                     onNavigateRegistry={() => navigate('/faculty/dashboard')}
                     onNavigateSeminars={() => navigate('/faculty/seminars')}
@@ -399,7 +401,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <RevocationPage initialNo={new URLSearchParams(location.search).get('no') || ''} onBack={() => navigate('/faculty/registry')} />
                 </main>
               </>
@@ -422,7 +424,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <SeminarsPage />
                 </main>
               </>
@@ -445,7 +447,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <StudentsPage />
                 </main>
               </>
@@ -468,7 +470,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <RegistryPage initialStatus={new URLSearchParams(location.search).get('status') || ''}
                     onOpenRevocation={no => navigate('/faculty/revocation?no=' + encodeURIComponent(no))} />
                 </main>
@@ -492,7 +494,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
                   <TemplatesPage />
                 </main>
               </>

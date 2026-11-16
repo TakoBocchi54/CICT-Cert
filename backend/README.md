@@ -10,7 +10,7 @@ For a database using the previous schema, back it up and stop the backend before
 node scripts/migrateSeminarSchema.js "Asia/Kuala_Lumpur"
 ```
 
-The argument must be the timezone originally used for that database's `TIMESTAMP` values. `Asia/Kuala_Lumpur` is the inspected local database setting; confirm the original setting separately for Supabase. The script applies migrations `001` through `009` in order. Each migration uses a transaction. Migration `007` (Merkle batches) belongs to a new contract deployment and stops if any wallet link exists; see [Merkle batch issuance](#merkle-batch-issuance-and-sparse-merkle-revocation-migration-007). Migration `001` stops if certificate/blockchain history exists, email normalization produces duplicates, or existing data violates a constraint. Existing certificate history needs a reviewed backfill; the migration never invents student consent.
+The argument must be the timezone originally used for that database's `TIMESTAMP` values. `Asia/Kuala_Lumpur` is the inspected local database setting; confirm the original setting separately for Supabase. The script applies migrations `001` through `010` in order. Each migration uses a transaction. Migration `007` (Merkle batches) belongs to a new contract deployment and stops if any wallet link exists; see [Merkle batch issuance](#merkle-batch-issuance-and-sparse-merkle-revocation-migration-007). Migration `001` stops if certificate/blockchain history exists, email normalization produces duplicates, or existing data violates a constraint. Existing certificate history needs a reviewed backfill; the migration never invents student consent.
 
 If migration `001` was already applied, use your database SQL client to apply only the remaining migrations in order: `002_remove_replacement_link.sql`, `003_remove_failure_reason.sql`, then `004_remove_certificate_created_at.sql`. These remove the optional replacement link, failure explanation, and certificate preparation timestamp respectively, preserving the certificate and transaction rows. Do not rerun the initial migration script on an already migrated database.
 
@@ -225,6 +225,21 @@ A template is an uploaded background plus placed fields (`fields` JSONB: recipie
 | DELETE | `/api/faculty/certificate-templates/:templateID/signatures/:signatureID` | — (also removes its placement from `fields`) |
 | GET | `/api/certificate-templates/:templateID/image` | — (public) |
 | GET | `/api/certificate-templates/:templateID/signatures/:signatureID` | — (public) |
+
+## Notifications (migration 010)
+
+In-app notifications have no events table. `GET /api/notifications` (student or faculty session, re-checked against the database) derives each account's items from timestamps the app already keeps, newest first, at most 20, from the last 60 days, and returns `{ unread, seenAt, items: [{ id, kind, text, at, link }] }`. `POST /api/notifications/seen` sets `users."notificationsSeenAt"`; items newer than it are unread.
+
+| Kind | Who | From |
+|---|---|---|
+| `issued`, `revoked` | the student | `certificate."issuedAt"` / `"revokedAt"` (+ the confirmed revocation's reason) |
+| `registrations` | all faculty | `seminar_registration."registeredAt"`, one item per seminar, counting those since the account last looked |
+| `closed` | all faculty | `seminar."registrationClosesAt"` that has passed |
+| `failed` | `canIssue` | a FAILED mint whose certificates are still unissued, or a FAILED revocation whose certificates are still issued |
+| `pending` | `canIssue` | a transaction PENDING for more than 15 minutes |
+| `low-balance` | `canIssue` | the issuer balance below `ISSUER_LOW_BALANCE_POL` (default 0.5 POL, about two full 100-certificate batches at 25–35 gwei); left out when the RPC fails |
+
+`issuer_wallet."lowBalanceSince"` is set when the balance is first seen below the threshold (on the dashboard or in notifications) and cleared once it is above again, so the low-balance item keeps its time and a later drop is a new item. `GET /api/faculty/certificates/issuer-wallet` also returns `threshold` and `low`. There is no email or push; everything is in the app.
 
 ## Checks
 

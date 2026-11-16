@@ -9,6 +9,8 @@ CREATE TABLE users (
     "role" VARCHAR(20) NOT NULL
         CHECK ("role" IN ('FACULTY', 'STUDENT')),
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Notifications newer than this are unread (NULL = none read yet).
+    "notificationsSeenAt" TIMESTAMPTZ,
     -- Faculty must always have a password.
     CONSTRAINT chk_faculty_has_password
         CHECK ("role" = 'STUDENT' OR "passwordHash" IS NOT NULL)
@@ -57,7 +59,9 @@ CREATE TABLE issuer_wallet (
     "label" VARCHAR(100) NOT NULL,
     "network" VARCHAR(100) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- When the balance was first seen below the low-balance threshold; NULL while it is above.
+    "lowBalanceSince" TIMESTAMPTZ
 );
 
 -- Faculty-uploaded certificate designs. Rendering only: the certificate hash never includes the template.

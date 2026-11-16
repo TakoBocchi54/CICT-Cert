@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Lockup, Btn } from './design-system';
+import NotificationBell from './NotificationBell';
 
 export default function TopNav({ role, view, onNavigate, onSignOut, userName, userTitle }) {
   const [menu, setMenu] = useState(false);
@@ -71,6 +72,8 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
             <i className="ph-bold ph-sign-out"></i>
             Sign out
           </button>
+
+          <NotificationBell />
 
           <div className="relative">
             <button

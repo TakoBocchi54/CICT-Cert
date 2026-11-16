@@ -88,6 +88,7 @@ for (const migrated of [false, true]) {
         await client.query(await sql("migrations/007_merkle_batches.sql"));
         await client.query(await sql("migrations/008_integer_ids.sql"));
         await client.query(await sql("migrations/009_seminar_registration_link.sql"));
+        await client.query(await sql("migrations/010_notifications.sql"));
         await client.query(wallets);
       }
       await client.query("BEGIN");

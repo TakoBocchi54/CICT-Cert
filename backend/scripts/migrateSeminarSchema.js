@@ -20,6 +20,7 @@ if (!legacyTimezone) {
       "007_merkle_batches.sql",
       "008_integer_ids.sql",
       "009_seminar_registration_link.sql",
+      "010_notifications.sql",
     ]) {
       const sql = await readFile(new URL(`../sql/migrations/${name}`, import.meta.url), "utf8");
       await client.query(sql);
