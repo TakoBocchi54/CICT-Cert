@@ -64,7 +64,7 @@ export default function CertificatePreparation({ seminarID, disabled, mode }) {
   return <div>
     {mode === 'review' ? <>
       <p className="mb-2 text-ink-soft max-w-2xl">Check every name below: it is printed on the certificate exactly as shown, and students see the same name in their portal. Correct a name here before issuing; after issuance a correction needs revocation and a new certificate.</p>
-      <p className="mb-5 text-sm text-ink-muted max-w-2xl">Confirming attendance prepares certificates automatically. Run it again after adding attendees; existing numbers are kept. Students agreed to receive certificates when they linked their wallet, so there is no approval step. This does not mint or spend POL.</p>
+      <p className="mb-5 text-sm text-ink-muted max-w-2xl">Prepare certificates once attendance is marked (importing a CSV prepares them automatically). Run it again after marking more attendees; existing numbers are kept. Students agreed to receive certificates when they linked their wallet, so there is no approval step. This does not mint or spend POL.</p>
       <div className="flex flex-wrap gap-3">
         <Btn variant="line" disabled={busy || !canIssue} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Preparing...' : 'Prepare certificates'}</Btn>
         <Btn variant="ghost" icon="ph-arrows-clockwise" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh list</Btn>

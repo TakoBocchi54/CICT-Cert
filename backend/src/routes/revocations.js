@@ -1,7 +1,9 @@
 import { Router } from "express";
+import { formatEther } from "viem";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { pool } from "../db/pool.js";
 import { IssuanceError } from "../services/issuance.js";
+import { certificateContract, certificateIssuer } from "../services/certificates.js";
 import { findCertificate, prepareReplacement, revokeCertificates } from "../services/revocation.js";
 
 const router = Router();
@@ -23,6 +25,17 @@ router.get("/faculty/certificates/summary", async (_req, res) => {
     pool.query(`SELECT count(*) FILTER (WHERE status = 'ISSUED')::int AS "issuedCount", count(*) FILTER (WHERE status = 'REVOKED')::int AS "revokedCount" FROM certificate`),
     list("ISSUED", "issuedAt"), list("REVOKED", "revokedAt")]);
   res.json({ ...counts.rows[0], recentIssued: issued.rows, recentRevoked: revoked.rows });
+});
+
+// The contract's issuer wallet and its POL balance, which pays the gas for issuing and revoking.
+router.get("/faculty/certificates/issuer-wallet", async (_req, res) => {
+  try {
+    const { issuerAddress } = await certificateIssuer();
+    const balance = await certificateContract().client.getBalance({ address: issuerAddress });
+    res.json({ address: issuerAddress, balance: formatEther(balance) });
+  } catch {
+    res.status(503).json({ error: "Could not read the issuer wallet balance. Check the backend's Amoy RPC and contract settings." });
+  }
 });
 
 // Registry: certificates that reached the chain (issued or revoked), newest first.

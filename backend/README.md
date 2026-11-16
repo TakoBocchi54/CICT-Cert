@@ -10,7 +10,7 @@ For a database using the previous schema, back it up and stop the backend before
 node scripts/migrateSeminarSchema.js "Asia/Kuala_Lumpur"
 ```
 
-The argument must be the timezone originally used for that database's `TIMESTAMP` values. `Asia/Kuala_Lumpur` is the inspected local database setting; confirm the original setting separately for Supabase. The script applies migrations `001` through `008` in order. Each migration uses a transaction. Migration `007` (Merkle batches) belongs to a new contract deployment and stops if any wallet link exists; see [Merkle batch issuance](#merkle-batch-issuance-and-sparse-merkle-revocation-migration-007). Migration `001` stops if certificate/blockchain history exists, email normalization produces duplicates, or existing data violates a constraint. Existing certificate history needs a reviewed backfill; the migration never invents student consent.
+The argument must be the timezone originally used for that database's `TIMESTAMP` values. `Asia/Kuala_Lumpur` is the inspected local database setting; confirm the original setting separately for Supabase. The script applies migrations `001` through `009` in order. Each migration uses a transaction. Migration `007` (Merkle batches) belongs to a new contract deployment and stops if any wallet link exists; see [Merkle batch issuance](#merkle-batch-issuance-and-sparse-merkle-revocation-migration-007). Migration `001` stops if certificate/blockchain history exists, email normalization produces duplicates, or existing data violates a constraint. Existing certificate history needs a reviewed backfill; the migration never invents student consent.
 
 If migration `001` was already applied, use your database SQL client to apply only the remaining migrations in order: `002_remove_replacement_link.sql`, `003_remove_failure_reason.sql`, then `004_remove_certificate_created_at.sql`. These remove the optional replacement link, failure explanation, and certificate preparation timestamp respectively, preserving the certificate and transaction rows. Do not rerun the initial migration script on an already migrated database.
 
@@ -18,8 +18,8 @@ Deploy the migrated schema, backend, and frontend together: student responses no
 
 ## Seminar and certificate records
 
-- `seminar` stores the title, date, faculty `createdBy`, and creation time.
-- `seminar_registration` joins students to seminars. Its composite primary key prevents duplicate registration; `attended` defaults to false and is set by the final attendance import.
+- `seminar` stores the title, date, faculty `createdBy`, creation time, a display-only `venue` (required by the API for new seminars; NULL only on seminars created before migration 009), the random `registrationToken` behind its registration link, and `registrationClosesAt` (NULL = registration closed). See [Registration link](#registration-link-migration-009).
+- `seminar_registration` joins students to seminars. Its composite primary key prevents duplicate registration; `attended` defaults to false and is set by faculty ticking attendance (or the final attendance import).
 - Student Google email stays in `users.email`, normalized to lowercase without surrounding spaces. Registration references the student, so it needs no duplicate email, section, or school student number.
 - Certificates reference a registration and keep recipient/seminar snapshots. Missing wallets, hashes and authorization are allowed while pending; a hash requires a wallet (`chk_certificate_hash_wallet`).
 - Certificates keep `issuedAt` for successful issuance and `revokedAt` for revocation, without a draft `createdAt`. Pending or failed certificates have no `issuedAt`. Other tables retain their creation timestamps.
@@ -59,14 +59,32 @@ Faculty-only endpoints (session cookie of an active faculty account required):
 | POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "..." }] }` |
 | DELETE | `/api/faculty/students/:studentID` | — (`canIssue` only) |
 | GET | `/api/faculty/seminars` | — |
-| POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08", "templateID": "3" }` (`templateID` optional; `null` = built-in design) |
-| PATCH | `/api/faculty/seminars/:seminarID` | same body as POST; fixes a mistaken title/date/design (omit `templateID` to keep it). 409 once any certificate exists for the seminar |
+| POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08", "templateID": "3", "venue": "AVR", "registrationClosesAt": "2026-11-07T09:00:00.000Z" }` (`venue` required, 1–255 characters; `templateID` and `registrationClosesAt` optional, `null` = built-in design / registration closed) |
+| PATCH | `/api/faculty/seminars/:seminarID` | same body as POST; fixes a mistaken title/date/design/venue/deadline (omit `templateID`, `venue` or `registrationClosesAt` to keep it; a sent `venue` can't be empty). 409 once any certificate exists for the seminar |
 | DELETE | `/api/faculty/seminars/:seminarID` | — (`canIssue` only); deletes the seminar and its attendance rows, never student accounts. 409 once any certificate exists |
-| GET | `/api/faculty/seminars/:seminarID/registrations` | — (the seminar's attendance rows) |
+| GET | `/api/faculty/seminars/:seminarID/registrations` | — (registered students with `attended`, `walletConnected`, `attendanceLocked`, `hasCertificate`) |
+| POST | `/api/faculty/seminars/:seminarID/registration/close` | — closes registration now |
+| PATCH | `/api/faculty/seminars/:seminarID/registrations/:studentID` | `{ "attended": true }`; 409 when clearing attendance of an issued or in-flight certificate |
+| DELETE | `/api/faculty/seminars/:seminarID/registrations/:studentID` | — removes a registrant (account kept); 409 once a certificate exists for them |
 | POST | `/api/faculty/seminars/:seminarID/attendance/preview` | `{ "csv": "google_account\n...", "aliases": { "<listed email>": "<existing student email>" } }` |
 | POST | `/api/faculty/seminars/:seminarID/attendance/import` | `{ "csv": "...", "aliases": { ... }, "previewHash": "<returned by preview>" }` |
 
 Both student registration endpoints return `{ created, existing, duplicatesSkipped, students }`. `createdBy` on a seminar is always taken from the signed-in faculty account. Seminars are shared across CICT faculty; issuance and revocation require `canIssue`.
+
+## Registration link (migration 009)
+
+Students register for a seminar themselves through the link faculty share, `<frontend origin>/register/<registrationToken>`. The token is a random UUID so seminars can't be found by guessing IDs. Registration is open while `now() < "registrationClosesAt"`; nothing runs at the deadline. Closing early sets the deadline to now, and editing the deadline (before certificates exist) reopens it. Existing seminars get a token and a NULL deadline, so their registration stays closed. Apply `sql/migrations/009_seminar_registration_link.sql` (the general migration script applies it too).
+
+Public endpoints (`routes/registration.js`):
+
+| Method | Endpoint | Body |
+| --- | --- | --- |
+| GET | `/api/register/:token` | — returns title, date, venue, `registrationClosesAt`, `open`. With an optional `Authorization: Bearer <Web3Auth ID token>` also returns `email`, `account` (`{ fullName, program }` or null) and `registered`. 404 for an unknown token, 401 for a bad ID token, 403 for a faculty account |
+| POST | `/api/register/:token` | `{ "fullName": "...", "program": "..." }` with the Bearer ID token (required). Rate-limited |
+
+POST runs in one transaction holding a `FOR SHARE` lock on the seminar row (registrations run in parallel but wait for closing, editing or preparing). It returns 409 when registration is closed, creates the student account when missing, otherwise **saves the edited name and program** on the existing account, then adds an unattended `seminar_registration` row and starts the student session. Registering again returns 200 with `alreadyRegistered: true`; a new registration returns 201. Already-prepared certificates keep their name snapshot; faculty review names before issuing.
+
+This is the only way, besides faculty, that a student account is created. The login page still answers 403 for a Google account that never registered. Any Google account with the link can register, so faculty remove registrants who aren't CICT students; only students faculty mark as attended receive certificates. No student number or section is collected.
 
 ## Final attendance
 
@@ -166,6 +184,7 @@ Only an `ISSUED` certificate with a confirmed mint from the configured contract 
 | Method | Endpoint | Access |
 | --- | --- | --- |
 | GET | `/api/faculty/certificates?q=&status=` | Faculty; Registry list of `ISSUED`/`REVOKED` certificates (optional `status=ISSUED|REVOKED`), newest issued first, first 200 matches. `q` searches recipient name, email and seminar title, or an exact certificate number (`#` optional) |
+| GET | `/api/faculty/certificates/issuer-wallet` | Faculty; the contract's `issuer()` address and its Amoy POL balance (`{ address, balance }`, balance in POL as a decimal string); 503 when the RPC or contract settings fail |
 | GET | `/api/faculty/certificates/:certificateNo` | Faculty; certificate facts, token ID, mint transaction and latest revocation attempt |
 | POST | `/api/faculty/certificates/revoke` | Faculty with current `canIssue`; `{ "certificateNos": ["12", "15"], "reason": "..." }`; revoke in one transaction or resume the pending one |
 | POST | `/api/faculty/certificates/revocation/check` | Faculty with current `canIssue`; `{ "certificateNos": [...] }`; reconcile/resubmit, never sign a new one |

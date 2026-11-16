@@ -33,7 +33,7 @@ router.post("/auth/student/session", async (req, res) => {
   );
 
   if (rows.length === 0) {
-    return res.status(403).json({ error: "You're not registered. Please contact CICT." });
+    return res.status(403).json({ error: "You're not registered yet. Register through the seminar link your faculty shared." });
   }
 
   const s = rows[0];

@@ -90,6 +90,12 @@ CREATE TABLE seminar (
     "createdBy" INTEGER NOT NULL REFERENCES cict_faculty ("facultyID"),
     -- NULL = built-in design.
     "templateID" INTEGER REFERENCES certificate_template ("templateID") ON DELETE SET NULL,
+    -- Display only; never part of the certificate hash.
+    "venue" VARCHAR(255) CHECK ("venue" IS NULL OR btrim("venue") <> ''),
+    -- The shareable registration link. Random so seminars can't be enumerated by ID.
+    "registrationToken" UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    -- Students can register while now() < this; NULL = closed. Closing early sets it to now().
+    "registrationClosesAt" TIMESTAMPTZ,
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

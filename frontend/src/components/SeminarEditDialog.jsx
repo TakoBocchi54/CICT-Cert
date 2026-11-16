@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
 import TemplatePicker from './TemplatePicker';
+import { deadlineToInput, inputToDeadline } from '../lib/registrationLink';
 
 // Fix a mistaken seminar (typo in title or date), or delete it, before any certificate copies its details.
 export default function SeminarEditDialog({ seminar, canDelete, onClose, onDeleted }) {
@@ -12,6 +13,8 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   const [title, setTitle] = useState(seminar.seminarTitle);
   const [date, setDate] = useState(seminar.seminarDate);
   const [templateID, setTemplateID] = useState(String(seminar.templateID ?? ''));
+  const [venue, setVenue] = useState(seminar.venue ?? '');
+  const [deadline, setDeadline] = useState(deadlineToInput(seminar.registrationClosesAt));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const locked = seminar.certificateCount > 0;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] });
@@ -19,7 +22,8 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   useEffect(() => { dialog.current.showModal(); }, []);
 
   const save = useMutation({
-    mutationFn: () => api(`/api/faculty/seminars/${seminar.seminarID}`, { method: 'PATCH', body: { seminarTitle: title, seminarDate: date, templateID: templateID || null } }),
+    mutationFn: () => api(`/api/faculty/seminars/${seminar.seminarID}`, { method: 'PATCH', body: { seminarTitle: title, seminarDate: date, templateID: templateID || null,
+      venue, ...(deadlineChanged && { registrationClosesAt: inputToDeadline(deadline) }) } }),
     onSuccess: async () => { await refresh(); onClose(); },
   });
   const remove = useMutation({
@@ -27,7 +31,10 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
     onSuccess: async () => { await refresh(); onDeleted(); },
   });
   const busy = save.isPending || remove.isPending;
-  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate && templateID === String(seminar.templateID ?? '');
+  // The deadline input has minute precision, so it is sent only when edited (closing early stores seconds).
+  const deadlineChanged = deadline !== deadlineToInput(seminar.registrationClosesAt);
+  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate && templateID === String(seminar.templateID ?? '')
+    && venue.trim() === (seminar.venue ?? '') && !deadlineChanged;
   const [heading, icon, tone] = locked ? ['Seminar locked', 'ph-lock-simple', 'bg-paper-2 text-ink-muted']
     : confirmingDelete ? ['Delete this seminar?', 'ph-warning', 'bg-revoked-bg text-revoked']
     : ['Edit seminar', 'ph-pencil-simple', 'bg-paper-2 text-forest'];
@@ -86,6 +93,17 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
                 <label htmlFor="edit-seminar-date" className="eyebrow mb-2 block">Seminar date</label>
                 <input id="edit-seminar-date" className="field" type="date" min="0001-01-01" max="9999-12-31" required
                   value={date} onChange={event => { save.reset(); setDate(event.target.value); }} />
+              </div>
+              <div>
+                <label htmlFor="edit-seminar-venue" className="eyebrow mb-2 block">Venue</label>
+                <input id="edit-seminar-venue" className="field" required maxLength={255} autoComplete="off"
+                  value={venue} onChange={event => { save.reset(); setVenue(event.target.value); }} />
+              </div>
+              <div>
+                <label htmlFor="edit-seminar-deadline" className="eyebrow mb-2 block">Registration deadline</label>
+                {/* Clearing it closes registration; a later deadline reopens it. */}
+                <input id="edit-seminar-deadline" className="field" type="datetime-local"
+                  value={deadline} onChange={event => { save.reset(); setDeadline(event.target.value); }} />
               </div>
               <TemplatePicker id="edit-seminar-template" value={templateID} onChange={value => { save.reset(); setTemplateID(value); }} />
               {save.error && <p role="alert" className="text-sm text-revoked">{save.error.message}</p>}

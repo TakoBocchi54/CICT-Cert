@@ -87,11 +87,16 @@ for (const migrated of [false, true]) {
         await client.query(await sql("migrations/006_certificate_templates.sql"));
         await client.query(await sql("migrations/007_merkle_batches.sql"));
         await client.query(await sql("migrations/008_integer_ids.sql"));
+        await client.query(await sql("migrations/009_seminar_registration_link.sql"));
         await client.query(wallets);
       }
       await client.query("BEGIN");
       assert.equal((await client.query(`SELECT "signedTransaction" FROM blockchain_record LIMIT 1`)).rowCount, 0);
-      await client.query(`INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy") VALUES ('Web Security', '2026-11-08', 1)`);
+      const { rows: [seminar] } = await client.query(`INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy") VALUES ('Web Security', '2026-11-08', 1) RETURNING *`);
+      // Every seminar gets its own link token; registration stays closed until a deadline is set.
+      assert.match(seminar.registrationToken, /^[0-9a-f-]{36}$/);
+      assert.equal(seminar.registrationClosesAt, null);
+      await rejectsSQL(client, `UPDATE seminar SET "venue" = ' ' WHERE "seminarID" = 1`, /venue/);
       await rejectsSQL(client, `INSERT INTO certificate ${draft}`, /fk_certificate_registration/);
       await client.query(`INSERT INTO seminar_registration ("seminarID", "studentID") VALUES (1, 1), (1, 2)`);
       await rejectsSQL(client, `INSERT INTO seminar_registration ("seminarID", "studentID") VALUES (1, 1)`, /seminar_registration_pkey/);

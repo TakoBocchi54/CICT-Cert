@@ -20,6 +20,12 @@ export default function FacultyDashboardPage({
     retry: false,
     refetchOnWindowFocus: false,
   });
+  const issuerWallet = useQuery({
+    queryKey: ['issuer-wallet'],
+    queryFn: () => api('/api/faculty/certificates/issuer-wallet'),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
   const recent = summary.data?.recentIssued || [];
   const revoked = summary.data?.recentRevoked || [];
   const totalIssued = summary.data?.issuedCount ?? 0;
@@ -34,8 +40,8 @@ export default function FacultyDashboardPage({
       label: plural(latest.readyCount, 'Certificate ready for its batch', 'Certificates ready to issue in one batch') }
     : latest.awaitingCount ? { count: latest.awaitingCount, badge: 'Awaiting wallet setup', icon: 'ph-hourglass-medium', action: 'Open seminar',
       label: plural(latest.awaitingCount, 'Attendee has not signed in yet', 'Attendees have not signed in yet') }
-    : !latest.attendanceCount ? { count: null, badge: 'Attendance not imported', icon: 'ph-users', action: 'Import attendance',
-      label: 'Upload the final attendee list' }
+    : !latest.attendanceCount ? { count: latest.registrationCount, badge: 'Attendance not marked', icon: 'ph-users', action: 'Mark attendance',
+      label: plural(latest.registrationCount, 'Student registered', 'Students registered') }
     : latest.issuedCount < latest.attendanceCount ? { count: latest.attendanceCount - latest.issuedCount, badge: 'Certificates to prepare', icon: 'ph-stamp', action: 'Open seminar',
       label: plural(latest.attendanceCount - latest.issuedCount, 'Attendee without a certificate yet', 'Attendees without a certificate yet') }
     : { count: latest.issuedCount, badge: 'All issued', icon: 'ph-seal-check', action: 'Open seminar',
@@ -53,15 +59,7 @@ export default function FacultyDashboardPage({
             Seminar workspace
           </h1>
         </div>
-        <Btn 
-          onClick={() => onIssueClick()} 
-          icon="ph-stamp" 
-          iconRight="ph-arrow-right" 
-          className="!py-3.5 !px-7 !text-base rise" 
-          style={{ '--d': '.15s' }}
-        >
-          Manage seminars
-        </Btn>
+        <IssuerWallet query={issuerWallet} />
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6">
@@ -104,7 +102,7 @@ export default function FacultyDashboardPage({
                   <div className="text-xs text-ink-muted mt-2">
                     {seminar.attendanceCount
                       ? `${seminar.issuedCount} of ${seminar.attendanceCount} issued · ${seminar.readyCount} ready · ${seminar.awaitingCount} awaiting wallet`
-                      : 'Attendance not imported yet'}
+                      : 'Attendance not marked yet'}
                   </div>
                 </div>
               );
@@ -173,5 +171,27 @@ export default function FacultyDashboardPage({
         </section>
       </div>
     </div>
+  );
+}
+
+// POL in the issuer wallet pays the gas for every issue and revoke transaction. Sized like a large button.
+function IssuerWallet({ query }) {
+  const { data, error, isPending } = query;
+  const look = 'rise inline-flex items-center gap-2.5 rounded-xl border border-[var(--line)] bg-white px-7 py-3.5 text-base font-semibold';
+  if (isPending || error) return (
+    <div role={error ? 'alert' : 'status'} className={look + (error ? ' text-revoked' : ' text-ink-muted')} style={{ '--d': '.15s' }} title={error?.message}>
+      <i className={'ph-bold ' + (error ? 'ph-warning-circle' : 'ph-wallet')} aria-hidden="true"></i>
+      {error ? 'Issuer balance unavailable' : 'Loading issuer balance...'}
+    </div>
+  );
+  return (
+    <a href={`https://amoy.polygonscan.com/address/${data.address}`} target="_blank" rel="noreferrer" title={data.address}
+      aria-label={`Issuer wallet balance ${data.balance} POL. View on PolygonScan (opens in a new tab)`}
+      className={look + ' text-ink transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest'} style={{ '--d': '.15s' }}>
+      <i className="ph-bold ph-wallet text-forest" aria-hidden="true"></i>
+      <span className="font-normal text-ink-muted">Issuer wallet</span>
+      <span className="tabular-nums">{Number(data.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })} POL</span>
+      <i className="ph-bold ph-arrow-square-out text-sm text-ink-muted" aria-hidden="true"></i>
+    </a>
   );
 }

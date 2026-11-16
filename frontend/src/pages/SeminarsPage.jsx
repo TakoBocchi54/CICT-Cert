@@ -4,8 +4,14 @@ import { api } from '../lib/api';
 import { certificateProgress } from '../lib/certificateProgress';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { Btn } from '../components/design-system';
+import { RegistrationLink } from '../components/Registrants';
+import NewSeminarDialog from '../components/NewSeminarDialog';
 
 const day = iso => new Date(iso + 'T00:00:00');
+const matchSeminars = (list, search) => {
+  const query = search.trim().toLowerCase();
+  return query ? list.filter(seminar => seminar.seminarTitle.toLowerCase().includes(query) || seminar.venue?.toLowerCase().includes(query)) : list;
+};
 const fmt = iso => day(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
 // Loading / error / empty handling shared by every query on this page.
@@ -77,9 +83,11 @@ const SectionHead = ({ id, icon, title, count }) => (
   </div>
 );
 
-// Read-only view of seminars and their attendance and certificates. Creating and issuing happen in the Issue tab.
+// Seminars are created here; their attendance and certificates are shown read-only. Ticking attendance and issuing happen in the Issue tab.
 export default function SeminarsPage() {
   const [selectedId, setSelectedId] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
   const seminars = useQuery({ queryKey: ['faculty-seminars'], queryFn: () => api('/api/faculty/seminars'), retry: false });
   const selected = seminars.data?.find(seminar => seminar.seminarID === selectedId) || seminars.data?.[0];
   const id = selected?.seminarID;
@@ -96,16 +104,19 @@ export default function SeminarsPage() {
 
   return (
     <div className="pb-16">
-      <div className="mb-10">
-        <div className="eyebrow mb-3 rise">Seminars</div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Seminars</h1>
-        <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
-          See each seminar's attendance and certificates. Create seminars and issue certificates in the Issue tab.
-        </p>
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <div className="eyebrow mb-3 rise">Seminars</div>
+          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Seminars</h1>
+          <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
+            Create a seminar and share its registration link. Mark attendance and issue certificates in the Issue tab.
+          </p>
+        </div>
+        <Btn icon="ph-plus" className="rise" style={{ '--d': '.15s' }} onClick={() => setCreating(true)}>New seminar</Btn>
       </div>
 
       <div className={seminars.data?.length ? '' : 'sheet'}>
-        <QueryState query={seminars} label="seminars" icon="ph-calendar-blank" empty="No seminars yet. Create one in the Issue tab.">
+        <QueryState query={seminars} label="seminars" icon="ph-calendar-blank" empty="No seminars yet. Create one with New seminar.">
           {list => (
             <div className="grid gap-8 lg:grid-cols-12">
               <aside aria-labelledby="seminar-list-title" className="lg:col-span-4">
@@ -114,8 +125,15 @@ export default function SeminarsPage() {
                     <h2 id="seminar-list-title" className="eyebrow">All seminars</h2>
                     <span className="text-xs font-semibold tabular-nums text-ink-muted">{list.length}</span>
                   </div>
-                  <ul className="max-h-80 space-y-1 overflow-y-auto p-2 lg:max-h-[calc(100vh-14rem)]">
-                    {list.map(seminar => {
+                  <div className="relative border-b border-[var(--line)] p-2">
+                    <label htmlFor="seminar-search" className="sr-only">Search seminars by title or venue</label>
+                    <i className="ph-bold ph-magnifying-glass pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true"></i>
+                    <input id="seminar-search" type="search" className="field !pl-11" autoComplete="off" placeholder="Search seminars"
+                      value={search} onChange={event => setSearch(event.target.value)} />
+                  </div>
+                  <ul className="max-h-80 space-y-1 overflow-y-auto p-2 lg:max-h-[calc(100vh-18rem)]">
+                    {!matchSeminars(list, search).length && <li className="px-3 py-6 text-center text-sm text-ink-muted">No seminar matches "{search.trim()}".</li>}
+                    {matchSeminars(list, search).map(seminar => {
                       const active = seminar.seminarID === id;
                       const date = day(seminar.seminarDate);
                       return (
@@ -145,10 +163,10 @@ export default function SeminarsPage() {
                 <SeminarSummary seminar={selected} />
 
                 <section className="sheet overflow-hidden" aria-labelledby="attendees-title">
-                  <SectionHead id="attendees-title" icon="ph-users-three" title="Attendees" count={attendees.data?.length} />
-                  <QueryState query={attendees} label="attendees" icon="ph-users-three" empty="No attendance imported yet.">
+                  <SectionHead id="attendees-title" icon="ph-users-three" title="Registered students" count={attendees.data?.length} />
+                  <QueryState query={attendees} label="registered students" icon="ph-users-three" empty="No one has registered yet.">
                     {rows => (
-                      <ScrollTable caption="Seminar attendees" head={['Name', 'Program', 'Google account', 'Attendance', 'Wallet']}>
+                      <ScrollTable caption="Registered students and attendance" head={['Name', 'Program', 'Google account', 'Attendance', 'Wallet']}>
                         {rows.map(row => (
                           <tr key={row.studentID} className="transition-colors hover:bg-paper">
                             <td className="px-4 py-3 font-medium">{row.fullName}</td>
@@ -199,6 +217,8 @@ export default function SeminarsPage() {
           )}
         </QueryState>
       </div>
+      {creating && <NewSeminarDialog onClose={() => setCreating(false)}
+        onCreated={seminar => { setCreating(false); setSelectedId(seminar.seminarID); }} />}
     </div>
   );
 }
@@ -222,7 +242,10 @@ function SeminarSummary({ seminar }) {
             <i className="ph-bold ph-calendar-blank" aria-hidden="true"></i>{fmt(seminar.seminarDate)}</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-2 px-3 py-1">
             <i className="ph-bold ph-frame-corners" aria-hidden="true"></i>{seminar.templateName ? `Design: ${seminar.templateName}` : 'Built-in design'}</span>
+          {seminar.venue && <span className="inline-flex items-center gap-1.5 rounded-full bg-paper-2 px-3 py-1">
+            <i className="ph-bold ph-map-pin" aria-hidden="true"></i>{seminar.venue}</span>}
         </div>
+        <div className="mt-5"><RegistrationLink seminar={seminar} /></div>
         <div className="mt-5">
           <div className="flex justify-between text-xs text-ink-muted">
             <span>{seminar.issuedCount} of {seminar.attendanceCount} attendees issued</span>

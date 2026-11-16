@@ -10,12 +10,21 @@ import { readAttendanceCsv, googleEmail, CsvError } from "../utils/seminarCsv.js
 const router = Router();
 router.use("/faculty/seminars", requireFaculty, requireActiveFaculty);
 
-router.param("seminarID", (req, res, next, value) => {
-  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
-    return res.status(400).json({ error: "Invalid seminar ID." });
-  }
-  next();
-});
+for (const [name, label] of [["seminarID", "seminar"], ["studentID", "student"]]) {
+  router.param(name, (req, res, next, value) => {
+    if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
+      return res.status(400).json({ error: `Invalid ${label} ID.` });
+    }
+    next();
+  });
+}
+
+// Attendance can't be cleared once the student's certificate is issued or has a blockchain transaction in flight.
+const ATTENDANCE_LOCKED = `EXISTS (SELECT 1 FROM certificate c WHERE c."seminarID" = r."seminarID" AND c."studentID" = r."studentID"
+  AND (c."status" = 'ISSUED' OR EXISTS (
+    SELECT 1 FROM blockchain_record b WHERE b."certificateID" = c."certificateID"
+      AND (b."transactionStatus" = 'PENDING' OR (b."transactionType" = 'MINT' AND b."transactionStatus" = 'CONFIRMED' AND c."status" <> 'REVOKED'))
+  )))`;
 
 router.get("/faculty/seminars", async (_req, res) => {
   // readyCount: wallet linked, not yet issued; awaitingCount: prepared, waiting for the student to link a wallet.
@@ -29,7 +38,8 @@ router.get("/faculty/seminars", async (_req, res) => {
       FROM certificate c JOIN seminar_registration cr USING ("seminarID", "studentID")
       LEFT JOIN student_wallet cw ON cw."studentID" = c."studentID" GROUP BY c."seminarID")
     SELECT s."seminarID", s."seminarTitle", to_char(s."seminarDate", 'YYYY-MM-DD') AS "seminarDate", s."createdBy",
-           s."templateID"::text AS "templateID", t."name" AS "templateName",
+           s."templateID"::text AS "templateID", t."name" AS "templateName", s."venue", s."registrationToken",
+           s."registrationClosesAt", coalesce(s."registrationClosesAt" > now(), false) AS "registrationOpen",
            count(r."studentID")::int AS "registrationCount",
            count(r."studentID") FILTER (WHERE r."attended")::int AS "attendanceCount",
            count(w."studentWalletID")::int AS "walletCount",
@@ -45,8 +55,11 @@ router.get("/faculty/seminars", async (_req, res) => {
   res.json(rows);
 });
 
-// Returns { title, date } or { error } for a create/edit request body.
-function readSeminarFields(body) {
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+// Returns { title, date, templateID, venue, closesAt } or { error } for a create/edit request body.
+// The venue is required, except that an edit may leave it out to keep the current one.
+function readSeminarFields(body, { editing = false } = {}) {
   const title = typeof body?.seminarTitle === "string" ? body.seminarTitle.trim() : "";
   const date = body?.seminarDate;
   if (!title || title.length > 255 || /[\u0000-\u001f\u007f]/.test(title)) {
@@ -61,19 +74,30 @@ function readSeminarFields(body) {
   if (templateID !== null && (!["string", "number"].includes(typeof templateID) || !/^[1-9]\d{0,9}$/.test(String(templateID)) || BigInt(templateID) > 2147483647n)) {
     return { error: "Choose a valid certificate design." };
   }
-  return { title, date, templateID };
+  const venue = typeof body?.venue === "string" ? body.venue.trim() : body?.venue;
+  if (!(editing && venue === undefined) && (typeof venue !== "string" || !venue || venue.length > 255 || /[\u0000-\u001f\u007f]/.test(venue))) {
+    return { error: "Enter a venue containing 1–255 characters." };
+  }
+  // Registration deadline: null = registration closed (no link to share yet).
+  const closesAt = body?.registrationClosesAt ?? null;
+  if (closesAt !== null && (typeof closesAt !== "string" || !ISO_TIMESTAMP.test(closesAt) || !Number.isFinite(Date.parse(closesAt)))) {
+    return { error: "Enter a valid registration deadline." };
+  }
+  return { title, date, templateID, venue, closesAt };
 }
 
-const SEMINAR_COLUMNS = `"seminarID", "seminarTitle", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate", "createdBy", "templateID"::text AS "templateID"`;
+const SEMINAR_COLUMNS = `"seminarID", "seminarTitle", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate", "createdBy", "templateID"::text AS "templateID",
+  "venue", "registrationToken", "registrationClosesAt", coalesce("registrationClosesAt" > now(), false) AS "registrationOpen"`;
 const MISSING_TEMPLATE = "That certificate design no longer exists. Choose another one.";
 
 router.post("/faculty/seminars", async (req, res) => {
-  const { title, date, templateID, error } = readSeminarFields(req.body);
+  const { title, date, templateID, venue, closesAt, error } = readSeminarFields(req.body);
   if (error) return res.status(400).json({ error });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy", "templateID") VALUES ($1, $2, $3, $4) RETURNING ${SEMINAR_COLUMNS}`,
-      [title, date, req.faculty.facultyID, templateID],
+      `INSERT INTO seminar ("seminarTitle", "seminarDate", "createdBy", "templateID", "venue", "registrationClosesAt")
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${SEMINAR_COLUMNS}`,
+      [title, date, req.faculty.facultyID, templateID, venue, closesAt],
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -82,9 +106,9 @@ router.post("/faculty/seminars", async (req, res) => {
   }
 });
 
-// Fixing a mistaken seminar is only allowed before any certificate exists: certificates copy its title and date.
-// The seminar row lock serializes this with attendance import and certificate preparation.
-async function changeUnusedSeminar(seminarID, res, change) {
+// Runs change(client) holding the seminar row lock, which serializes it with attendance, preparation and issuance.
+// change may throw IssuanceError for an HTTP error; an undefined result answers 204.
+async function changeLockedSeminar(seminarID, res, change) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -92,11 +116,6 @@ async function changeUnusedSeminar(seminarID, res, change) {
     if (!seminar.rowCount) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Seminar not found." });
-    }
-    const used = await client.query(`SELECT 1 FROM certificate WHERE "seminarID" = $1 LIMIT 1`, [seminarID]);
-    if (used.rowCount) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Certificates have already been prepared for this seminar, so its title, date and attendance record can no longer be changed or deleted." });
     }
     const result = await change(client);
     await client.query("COMMIT");
@@ -107,10 +126,20 @@ async function changeUnusedSeminar(seminarID, res, change) {
   } finally { client.release(); }
 }
 
+// Fixing a mistaken seminar is only allowed before any certificate exists: certificates copy its title and date.
+const changeUnusedSeminar = (seminarID, res, change) => changeLockedSeminar(seminarID, res, async client => {
+  if ((await client.query(`SELECT 1 FROM certificate WHERE "seminarID" = $1 LIMIT 1`, [seminarID])).rowCount) {
+    throw new IssuanceError(409, "Certificates have already been prepared for this seminar, so its title, date and attendance record can no longer be changed or deleted.");
+  }
+  return change(client);
+});
+
 router.patch("/faculty/seminars/:seminarID", async (req, res) => {
-  const { title, date, templateID, error } = readSeminarFields(req.body);
+  const { title, date, templateID, venue, closesAt, error } = readSeminarFields(req.body, { editing: true });
   if (error) return res.status(400).json({ error });
-  const keepTemplate = !Object.hasOwn(req.body ?? {}, "templateID");
+  // Fields left out of the body keep their current value.
+  const keep = name => !Object.hasOwn(req.body ?? {}, name);
+  const keepTemplate = keep("templateID");
   await changeUnusedSeminar(req.params.seminarID, res, async client => {
     // FOR SHARE keeps the chosen template from being deleted before this commits.
     if (!keepTemplate && templateID !== null && !(await client.query(
@@ -118,9 +147,11 @@ router.patch("/faculty/seminars/:seminarID", async (req, res) => {
       throw new IssuanceError(400, MISSING_TEMPLATE);
     }
     return (await client.query(
-      `UPDATE seminar SET "seminarTitle" = $2, "seminarDate" = $3, "templateID" = CASE WHEN $5 THEN "templateID" ELSE $4::int END
+      `UPDATE seminar SET "seminarTitle" = $2, "seminarDate" = $3, "templateID" = CASE WHEN $5 THEN "templateID" ELSE $4::int END,
+         "venue" = CASE WHEN $7 THEN "venue" ELSE $6::varchar END,
+         "registrationClosesAt" = CASE WHEN $9 THEN "registrationClosesAt" ELSE $8::timestamptz END
        WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
-      [req.params.seminarID, title, date, templateID, keepTemplate])).rows[0];
+      [req.params.seminarID, title, date, templateID, keepTemplate, venue, keep("venue"), closesAt, keep("registrationClosesAt")])).rows[0];
   });
 });
 
@@ -137,7 +168,8 @@ router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {
   if (!seminar.rowCount) return res.status(404).json({ error: "Seminar not found." });
   const { rows } = await pool.query(
     `SELECT s."studentID", s."fullName", s."program", u."email", r."attended", r."registeredAt",
-            (w."studentWalletID" IS NOT NULL) AS "walletConnected"
+            (w."studentWalletID" IS NOT NULL) AS "walletConnected", ${ATTENDANCE_LOCKED} AS "attendanceLocked",
+            EXISTS (SELECT 1 FROM certificate c WHERE c."seminarID" = r."seminarID" AND c."studentID" = r."studentID") AS "hasCertificate"
      FROM seminar_registration r JOIN student s ON s."studentID" = r."studentID"
      JOIN users u ON u."userID" = s."userID"
      LEFT JOIN student_wallet w ON w."studentID" = s."studentID"
@@ -145,6 +177,44 @@ router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {
     [req.params.seminarID],
   );
   res.json(rows);
+});
+
+// Registration closes on its own at the deadline; this closes it now.
+router.post("/faculty/seminars/:seminarID/registration/close", async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE seminar SET "registrationClosesAt" = LEAST("registrationClosesAt", now()) WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
+    [req.params.seminarID]);
+  if (!rows.length) return res.status(404).json({ error: "Seminar not found." });
+  res.json(rows[0]);
+});
+
+// Marks one registered student as attended or absent (replaces the attendance CSV).
+router.patch("/faculty/seminars/:seminarID/registrations/:studentID", async (req, res) => {
+  const { seminarID, studentID } = req.params;
+  const attended = req.body?.attended;
+  if (typeof attended !== "boolean") return res.status(400).json({ error: "Choose whether the student attended." });
+  await changeLockedSeminar(seminarID, res, async client => {
+    const row = (await client.query(`SELECT ${ATTENDANCE_LOCKED} AS "attendanceLocked" FROM seminar_registration r
+      WHERE r."seminarID" = $1 AND r."studentID" = $2`, [seminarID, studentID])).rows[0];
+    if (!row) throw new IssuanceError(404, "This student is not registered for the seminar.");
+    if (!attended && row.attendanceLocked) {
+      throw new IssuanceError(409, "Attendance cannot be cleared for a student with an issued certificate or an unresolved blockchain transaction.");
+    }
+    await client.query(`UPDATE seminar_registration SET "attended" = $3 WHERE "seminarID" = $1 AND "studentID" = $2`, [seminarID, studentID, attended]);
+    return { studentID: Number(studentID), attended };
+  });
+});
+
+// Removes a registrant (for example someone who isn't a CICT student). Their account is kept.
+router.delete("/faculty/seminars/:seminarID/registrations/:studentID", async (req, res) => {
+  const { seminarID, studentID } = req.params;
+  await changeLockedSeminar(seminarID, res, async client => {
+    if ((await client.query(`SELECT 1 FROM certificate WHERE "seminarID" = $1 AND "studentID" = $2 LIMIT 1`, [seminarID, studentID])).rowCount) {
+      throw new IssuanceError(409, "A certificate already exists for this student, so they can't be removed from the seminar.");
+    }
+    const deleted = await client.query(`DELETE FROM seminar_registration WHERE "seminarID" = $1 AND "studentID" = $2`, [seminarID, studentID]);
+    if (!deleted.rowCount) throw new IssuanceError(404, "This student is not registered for the seminar.");
+  });
 });
 
 // aliases: { "<listed email>": "<existing student email>" }, chosen by faculty from the "Did you mean?" suggestions.
@@ -181,12 +251,7 @@ router.post(["/faculty/seminars/:seminarID/attendance/preview", "/faculty/semina
     }
     const { rows } = await client.query(
       `SELECT r."studentID", r."attended", s."fullName", u."email",
-              (w."studentWalletID" IS NOT NULL) AS "walletConnected",
-              EXISTS (SELECT 1 FROM certificate c WHERE c."seminarID" = r."seminarID" AND c."studentID" = r."studentID"
-                AND (c."status" = 'ISSUED' OR EXISTS (
-                  SELECT 1 FROM blockchain_record b WHERE b."certificateID" = c."certificateID"
-                    AND (b."transactionStatus" = 'PENDING' OR (b."transactionType" = 'MINT' AND b."transactionStatus" = 'CONFIRMED' AND c."status" <> 'REVOKED'))
-                ))) AS "attendanceLocked"
+              (w."studentWalletID" IS NOT NULL) AS "walletConnected", ${ATTENDANCE_LOCKED} AS "attendanceLocked"
        FROM seminar_registration r JOIN student s ON s."studentID" = r."studentID"
        JOIN users u ON u."userID" = s."userID"
        LEFT JOIN student_wallet w ON w."studentID" = r."studentID"

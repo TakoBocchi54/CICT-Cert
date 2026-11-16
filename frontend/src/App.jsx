@@ -18,6 +18,7 @@ import RegistryPage from './pages/RegistryPage';
 import TemplatesPage from './pages/TemplatesPage';
 import SeminarsPage from './pages/SeminarsPage';
 import VerifierPortalPage from './pages/VerifierPortalPage';
+import RegisterPage from './pages/RegisterPage';
 
 // Main app content with routing logic
 function AppContent() {
@@ -79,8 +80,8 @@ function AppContent() {
   }, []);
   
 
-  // Check if we're on verifier page
-  const isVerifierPage = location.pathname.startsWith('/verify');
+  // Public pages render without waiting for the session check.
+  const isPublicPage = location.pathname.startsWith('/verify') || location.pathname.startsWith('/register/');
 
   const needsWalletSetup = user?.role === 'student' && !user.walletAddress;
 
@@ -183,7 +184,7 @@ function AppContent() {
       tokenID: certificate.tokenID, transactionHash: certificate.transactionHash, template: certificate.template }));
   const selectedCertificate = user?.role === 'student' && studentCerts.find(certificate => certificate.id === selectedCertId);
 
-  if (!isVerifierPage && checkingSession) {
+  if (!isPublicPage && checkingSession) {
     return (
       <main className="max-w-xl mx-auto p-8 text-center">
         <p>Checking your session...</p>
@@ -191,7 +192,7 @@ function AppContent() {
     );
   }
 
-  if (!isVerifierPage && sessionError) {
+  if (!isPublicPage && sessionError) {
     return (
       <main className="max-w-xl mx-auto p-8 text-center">
         <p role="alert">{sessionError}</p>
@@ -376,6 +377,7 @@ function AppContent() {
                 <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={location.pathname}>
                   <IssuancePage 
                     onNavigateRegistry={() => navigate('/faculty/dashboard')}
+                    onNavigateSeminars={() => navigate('/faculty/seminars')}
                   />
                 </main>
               </>
@@ -499,6 +501,9 @@ function AppContent() {
             )
           }
         />
+
+        {/* Public seminar registration (the link faculty share) */}
+        <Route path="/register/:token" element={<RegisterPage onLogin={handleLogin} />} />
 
         {/* Public Verifier */}
         <Route

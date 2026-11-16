@@ -86,7 +86,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     }
   });
   await t.test("faculty can create a seminar without issuance permission; creator comes from the session", async () => {
-    const result = await request("POST", "", { seminarTitle: "  Web Security  ", seminarDate: "2028-02-29", createdBy: "1" });
+    const result = await request("POST", "", { seminarTitle: "  Web Security  ", venue: "AVR", seminarDate: "2028-02-29", createdBy: "1" });
     assert.equal(result.status, 201);
     assert.equal(result.data.createdBy, 2);
     assert.equal(result.data.seminarTitle, "Web Security");
@@ -116,7 +116,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const listed = (await request()).data.find(row => row.seminarID === seminarID);
     assert.deepEqual([listed.seminarTitle, listed.certificateCount], ["Web Security 101", 0]);
 
-    const mistake = (await request("POST", "", { seminarTitle: "Wrong seminar", seminarDate: "2026-11-10" })).data.seminarID;
+    const mistake = (await request("POST", "", { seminarTitle: "Wrong seminar", venue: "AVR", seminarDate: "2026-11-10" })).data.seminarID;
     await db.query(`INSERT INTO seminar_registration ("seminarID", "studentID", attended) VALUES ($1, 2, true)`, [mistake]);
     const students = (await db.query("SELECT count(*) FROM student")).rows[0].count;
     assert.equal((await request("DELETE", "/" + mistake)).status, 403);
@@ -129,10 +129,10 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const templateID = (await db.query(`INSERT INTO certificate_template ("name", "image", "imageType", "imageWidth", "imageHeight", "fields", "createdBy")
       VALUES ('Gold', decode('00', 'hex'), 'image/png', 1754, 1240, '{}', 1) RETURNING "templateID"::text`)).rows[0].templateID;
     for (const bad of [42, "abc", "0"]) {
-      assert.equal((await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID: bad })).status, 400);
+      assert.equal((await request("POST", "", { seminarTitle: "Designed", venue: "AVR", seminarDate: "2026-11-12", templateID: bad })).status, 400);
     }
-    assert.match((await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID: "999" })).data.error, /no longer exists/);
-    const created = await request("POST", "", { seminarTitle: "Designed", seminarDate: "2026-11-12", templateID });
+    assert.match((await request("POST", "", { seminarTitle: "Designed", venue: "AVR", seminarDate: "2026-11-12", templateID: "999" })).data.error, /no longer exists/);
+    const created = await request("POST", "", { seminarTitle: "Designed", venue: "AVR", seminarDate: "2026-11-12", templateID });
     assert.equal(created.status, 201);
     assert.equal(created.data.templateID, templateID);
     const id = created.data.seminarID;
@@ -141,10 +141,10 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const listed = (await request()).data.find(row => row.seminarID === id);
     assert.deepEqual([listed.templateID, listed.templateName], [templateID, "Gold"]);
     assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Designed 2", seminarDate: "2026-11-12", templateID: null })).data.templateID, null);
-    assert.equal((await request("POST", "", { seminarTitle: "Plain", seminarDate: "2026-11-12" })).data.templateID, null);
+    assert.equal((await request("POST", "", { seminarTitle: "Plain", venue: "AVR", seminarDate: "2026-11-12" })).data.templateID, null);
   });
 
-  const attendanceSeminar = await request("POST", "", { seminarTitle: "Attendance test", seminarDate: "2026-11-15" });
+  const attendanceSeminar = await request("POST", "", { seminarTitle: "Attendance test", venue: "AVR", seminarDate: "2026-11-15" });
   const attendanceID = attendanceSeminar.data.seminarID;
   const attendanceCSV = 'full_name,section,program,student_id,google_account\nWrong Name,Other,Other,999,EXISTING@gmail.com\nAnother,Other,Other,888,ana@gmail.com\nDuplicate,Other,Other,777,ANA@gmail.com';
   const previewAttendance = (csv, aliases) => request("POST", "/" + attendanceID + "/attendance/preview", { csv, aliases });
@@ -304,5 +304,43 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const listed = (await request()).data.find(row => row.seminarID === attendanceID);
     assert.equal(listed.seminarTitle, "Attendance test");
     assert.ok(listed.certificateCount >= 2);
+  });
+  await t.test("registration link: venue and deadline, close early, tick attendance, remove registrants", async () => {
+    for (const body of [{ registrationClosesAt: "2026-12-01 10:00" }, { registrationClosesAt: "2026-12-01T10:00" }, { registrationClosesAt: 5 },
+      { venue: "x".repeat(256) }, { venue: "Room\n1" }, { venue: "  " }, { venue: null }, { venue: undefined }]) {
+      assert.equal((await request("POST", "", { seminarTitle: "Link", seminarDate: "2026-12-01", venue: "AVR", ...body })).status, 400);
+    }
+    const created = await request("POST", "", { seminarTitle: "Link", seminarDate: "2026-12-01", venue: "  AVR  ",
+      registrationClosesAt: new Date(Date.now() + 3600_000).toISOString() });
+    assert.equal(created.status, 201);
+    const id = created.data.seminarID;
+    assert.equal(created.data.venue, "AVR");
+    assert.equal(created.data.registrationOpen, true);
+    assert.match(created.data.registrationToken, /^[0-9a-f-]{36}$/);
+    // Editing without the new fields keeps them; the venue can be changed but not emptied.
+    const edited = await request("PATCH", "/" + id, { seminarTitle: "Link 2", seminarDate: "2026-12-01" });
+    assert.deepEqual([edited.data.venue, edited.data.registrationOpen], ["AVR", true]);
+    assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Link 2", seminarDate: "2026-12-01", venue: "" })).status, 400);
+    assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Link 2", seminarDate: "2026-12-01", venue: " Room 301 " })).data.venue, "Room 301");
+    const closed = await request("POST", "/" + id + "/registration/close");
+    assert.equal(closed.data.registrationOpen, false);
+    assert.ok(new Date(closed.data.registrationClosesAt) <= new Date());
+    assert.equal((await request("POST", "/999999/registration/close")).status, 404);
+
+    await db.query(`INSERT INTO seminar_registration ("seminarID", "studentID") VALUES ($1, 2), ($1, 3)`, [id]);
+    assert.equal((await request("PATCH", "/" + id + "/registrations/2", { attended: "yes" })).status, 400);
+    assert.equal((await request("PATCH", "/" + id + "/registrations/0", { attended: true })).status, 400);
+    assert.equal((await request("PATCH", "/" + id + "/registrations/4", { attended: true })).status, 404);
+    assert.equal((await request("PATCH", "/" + id + "/registrations/2", { attended: true }, "")).status, 401);
+    assert.deepEqual((await request("PATCH", "/" + id + "/registrations/2", { attended: true })).data, { studentID: 2, attended: true });
+    const listed = (await request("GET", "/" + id + "/registrations")).data;
+    assert.deepEqual(listed.map(row => [row.studentID, row.attended, row.hasCertificate]), [[3, false, false], [2, true, false]]);
+    assert.equal((await request("DELETE", "/" + id + "/registrations/3")).status, 204);
+    assert.equal((await request("DELETE", "/" + id + "/registrations/3")).status, 404);
+
+    // Student 1 on the attendance seminar has an unreconciled mint: attendance stays, and the registrant can't be removed.
+    assert.equal((await request("PATCH", "/" + attendanceID + "/registrations/1", { attended: false })).status, 409);
+    assert.equal((await request("DELETE", "/" + attendanceID + "/registrations/1")).status, 409);
+    assert.equal((await request("GET", "/" + attendanceID + "/registrations")).data.find(row => row.studentID === 1).attendanceLocked, true);
   });
 });
