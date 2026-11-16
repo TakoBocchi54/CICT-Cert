@@ -50,7 +50,7 @@ export default function StudentsPage() {
   const canRemove = faculty.data?.canIssue;
 
   return (
-    <div>
+    <div className="pb-16 md:pb-24">
       <div className="mb-10">
         <div className="eyebrow mb-3 rise">Accounts</div>
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Students</h1>

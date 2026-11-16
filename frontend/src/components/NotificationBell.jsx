@@ -78,39 +78,39 @@ export default function NotificationBell() {
       {open && <>
         <div className="fixed inset-0 z-40" onClick={toggle} aria-hidden="true"></div>
         <section id="notification-panel" aria-label="Notifications"
-          className="pop sheet fixed left-4 right-4 top-[84px] z-50 overflow-hidden sm:absolute sm:left-auto sm:right-0 sm:top-[52px] sm:w-[23rem]"
+          className="pop sheet fixed right-4 top-[84px] z-50 w-[calc(100vw-2rem)] max-w-[20rem] overflow-hidden sm:absolute sm:right-0 sm:top-[52px]"
           style={{ transformOrigin: 'top right' }}>
-          <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-            <h2 className="font-serif text-xl font-medium">Notifications</h2>
-            {notifications.isFetching && <i className="ph-bold ph-circle-notch animate-spin text-ink-muted motion-reduce:animate-none" aria-hidden="true"></i>}
+          <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
+            <h2 className="text-sm font-semibold">Notifications</h2>
+            {notifications.isFetching && <i className="ph-bold ph-circle-notch animate-spin text-sm text-ink-muted motion-reduce:animate-none" aria-hidden="true"></i>}
           </div>
-          {notifications.isPending ? <p role="status" className="px-4 py-8 text-center text-sm text-ink-muted">Loading notifications...</p>
+          {notifications.isPending ? <p role="status" className="px-4 py-6 text-center text-sm text-ink-muted">Loading notifications...</p>
             : notifications.error ? (
               <div role="alert" className="space-y-2 px-4 py-6 text-center text-sm text-revoked">
                 <p>{notifications.error.message}</p>
                 <button type="button" onClick={() => notifications.refetch()} className="cursor-pointer text-xs font-semibold underline">Try again</button>
               </div>
             ) : !data.items.length ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-                <i className="ph ph-checks text-3xl text-ink-muted" aria-hidden="true"></i>
+              <div className="flex flex-col items-center gap-1.5 px-4 py-6 text-center">
+                <i className="ph ph-checks text-2xl text-ink-muted" aria-hidden="true"></i>
                 <p className="text-sm text-ink-muted">You're all caught up.</p>
               </div>
             ) : (
-              <ul className="max-h-[min(60vh,28rem)] overflow-y-auto p-2">
+              <ul className="max-h-[min(50vh,22rem)] overflow-y-auto p-1.5">
                 {data.items.map(item => {
                   const [icon, tone] = LOOKS[item.kind] ?? ['ph-bell', 'bg-paper-2 text-ink-soft'];
                   const isNew = !seenAt || new Date(item.at) > seenAt;
                   const external = /^https?:/.test(item.link);
                   const body = <>
-                    <span className={'mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full ' + tone} aria-hidden="true"><i className={'ph-bold ' + icon}></i></span>
+                    <span className={'mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm ' + tone} aria-hidden="true"><i className={'ph-bold ' + icon}></i></span>
                     <span className="min-w-0 flex-1">
-                      <span className={'block break-words text-sm ' + (isNew ? 'font-semibold text-ink' : 'text-ink-soft')}>
+                      <span className={'block break-words text-[13px] leading-snug ' + (isNew ? 'font-semibold text-ink' : 'text-ink-soft')}>
                         {isNew && <span className="sr-only">New: </span>}{item.text}</span>
                       <span className="mt-0.5 block text-xs text-ink-muted">{ago(item.at, notifications.dataUpdatedAt)}{external && ' · opens PolygonScan'}</span>
                     </span>
-                    {isNew && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-forest" aria-hidden="true"></span>}
+                    {isNew && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-forest" aria-hidden="true"></span>}
                   </>;
-                  const look = 'flex w-full cursor-pointer items-start gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest';
+                  const look = 'flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest';
                   return (
                     <li key={item.id}>
                       {external ? <a href={item.link} target="_blank" rel="noreferrer" className={look} onClick={() => setOpen(false)}>{body}</a>

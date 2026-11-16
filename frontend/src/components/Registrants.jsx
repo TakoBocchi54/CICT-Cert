@@ -43,7 +43,8 @@ export function RegistrationLink({ seminar }) {
 }
 
 // Everyone who registered through the link. Faculty tick who attended and remove registrants who aren't CICT students.
-export default function Registrants({ seminarID }) {
+// action: an extra control shown beside the search box (the Issue page's CSV upload button).
+export default function Registrants({ seminarID, action }) {
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState(null);
   const [search, setSearch] = useState('');
@@ -70,7 +71,10 @@ export default function Registrants({ seminarID }) {
   if (registrants.error) return (
     <div role="alert" className="mt-6 space-y-3 text-sm text-revoked">
       <p>{registrants.error.message}</p>
-      <Btn variant="line" size="sm" onClick={() => registrants.refetch()}>Try again</Btn>
+      <div className="flex flex-wrap gap-3">
+        <Btn variant="line" size="sm" onClick={() => registrants.refetch()}>Try again</Btn>
+        {action}
+      </div>
     </div>
   );
   const rows = registrants.data;
@@ -80,17 +84,20 @@ export default function Registrants({ seminarID }) {
   return (
     <div className="mt-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-serif text-2xl font-medium">Registered students</h3>
+        <h2 className="font-serif text-2xl font-medium">Registered students</h2>
         <p className="text-sm text-ink-soft tabular-nums">{rows.length} registered · {attended} attended</p>
       </div>
       <p className="mb-4 max-w-2xl text-sm text-ink-muted">
         Tick everyone who attended; only they receive a certificate. Remove anyone who isn't a CICT student.
       </p>
-      {rows.length > 0 && <div className="relative mb-3 max-w-md">
-        <label htmlFor={`registrant-search-${seminarID}`} className="sr-only">Search registered students by name or email</label>
-        <i className="ph-bold ph-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true"></i>
-        <input id={`registrant-search-${seminarID}`} type="search" className="field !pl-11" autoComplete="off" placeholder="Search by name or email"
-          value={search} onChange={event => setSearch(event.target.value)} />
+      {(rows.length > 0 || action) && <div className="mb-3 flex flex-wrap items-center gap-3">
+        {rows.length > 0 && <div className="relative min-w-0 flex-1 basis-60 sm:max-w-md">
+          <label htmlFor={`registrant-search-${seminarID}`} className="sr-only">Search registered students by name or email</label>
+          <i className="ph-bold ph-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true"></i>
+          <input id={`registrant-search-${seminarID}`} type="search" className="field !pl-11" autoComplete="off" placeholder="Search by name or email"
+            value={search} onChange={event => setSearch(event.target.value)} />
+        </div>}
+        {action && <div className="ml-auto">{action}</div>}
       </div>}
       {(mark.error || remove.error) && <p role="alert" className="mb-3 text-sm text-revoked">{(mark.error || remove.error).message}</p>}
       {!rows.length ? <p className="rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">No one has registered yet.</p> : (

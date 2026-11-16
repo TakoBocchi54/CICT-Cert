@@ -64,15 +64,6 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
             <div className="text-xs text-ink-muted">{userTitle || (role === 'faculty' ? 'Faculty' : 'Student')}</div>
           </div>
 
-          <button
-            onClick={() => setConfirmOut(true)}
-            className="hidden! lg:flex! btn btn-ghost btn-sm"
-            title="Sign out"
-          >
-            <i className="ph-bold ph-sign-out"></i>
-            Sign out
-          </button>
-
           <NotificationBell />
 
           <div className="relative">
@@ -127,16 +118,6 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
                         Account settings
                       </button>
                     )}
-                    <button
-                      onClick={() => {
-                        setMenu(false);
-                        onNavigate('verify');
-                      }}
-                      className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-paper-2"
-                    >
-                      <i className="ph-bold ph-seal-check text-verified"></i>
-                      Public verifier
-                    </button>
                     <button
                       onClick={() => {
                         setMenu(false);

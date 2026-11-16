@@ -66,7 +66,7 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
   const canRevoke = !!faculty.data?.canIssue;
 
   return (
-    <div>
+    <div className="pb-16 md:pb-24">
       <div className="mb-10">
         <div className="eyebrow mb-3 rise">Registry</div>
         <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Issued certificates</h1>
@@ -145,11 +145,16 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
                     <td className="p-3"><Pill status={cert.status === 'ISSUED' ? 'Verified' : 'Revoked'} /></td>
                     <td className="whitespace-nowrap px-6 py-3 text-right">
                       <a href={certificateVerificationUrl(cert.certificateHash, window.location.origin)} target="_blank" rel="noreferrer"
-                        className="btn btn-ghost btn-sm" aria-label={`Verify certificate ${cert.certificateNo} (opens in a new tab)`}>Verify</a>
-                      <Btn variant="ghost" size="sm" onClick={() => onOpenRevocation(cert.certificateNo)}
-                        aria-label={`${cert.status === 'ISSUED' ? 'Revoke' : 'Revocation details for'} certificate ${cert.certificateNo}`}>
-                        {cert.status === 'ISSUED' ? 'Revoke' : 'Details'}
-                      </Btn>
+                        className="btn btn-ghost btn-sm" aria-label={`View certificate ${cert.certificateNo} (opens in a new tab)`}>
+                        View<i className="ph-bold ph-arrow-square-out" aria-hidden="true"></i></a>
+                      {(() => {
+                        // Revoke and Replace only for faculty who can issue; everyone else gets the read-only Details.
+                        const [label, icon, tone] = cert.status === 'ISSUED' && canRevoke ? ['Revoke', 'ph-seal-warning', '!text-revoked hover:!bg-revoked-bg']
+                          : cert.status === 'REVOKED' && canRevoke && !cert.replaced ? ['Replace', 'ph-arrows-clockwise', '']
+                          : ['Details', 'ph-file-text', ''];
+                        return <Btn variant="ghost" size="sm" icon={icon} className={tone} onClick={() => onOpenRevocation(cert.certificateNo)}
+                          aria-label={`${label === 'Details' ? 'Details for' : label} certificate ${cert.certificateNo}`}>{label}</Btn>;
+                      })()}
                     </td>
                   </tr>
                 ))}

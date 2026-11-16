@@ -6,12 +6,14 @@ import { api } from '../lib/api';
 import { useSessionDraft } from '../lib/sessionDraft';
 import { useFacultyMe } from '../hooks/useFacultyMe';
 import CsvDropZone from './CsvDropZone';
+import { readCsvFile } from '../lib/csvFile';
 import DoneCard from './DoneCard';
 
 // Upload → preview → (register unknown attendees) → confirm. The draft ({ name, csv, aliases, preview }) survives tab
 // switches and reloads; a stale preview is still rejected by the server on confirm.
 // The step's footer action (Continue, or Confirm once a file is reviewed) is rendered into actionSlot, the wizard footer.
-export default function AttendanceImport({ seminarID, attendanceCount, disabled, onSaved, actionSlot, onContinue }) {
+// The hidden input #attendance-file-<seminarID> lets an outside button open the file picker directly; onFile runs once a file is read.
+export default function AttendanceImport({ seminarID, attendanceCount, disabled, onSaved, actionSlot, onContinue, onFile }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [draft, setDraft] = useSessionDraft('cict-attendance-' + seminarID);
@@ -49,11 +51,15 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
     onError: () => setDraft(draft && { name: draft.name, csv: draft.csv, aliases: draft.aliases }),
   });
   const busy = disabled || review.isPending || save.isPending;
+  const takeFile = next => { setFileError(''); review.reset(); save.reset(); setDraft(next); };
   const preview = draft?.preview;
   const notMatched = preview ? preview.unregistered.length + preview.facultyEmails.length : 0;
 
   return (
     <div>
+      <input id={'attendance-file-' + seminarID} type="file" accept=".csv,text/csv" hidden disabled={busy}
+        onChange={async event => { const file = event.target.files?.[0]; event.target.value = '';
+          await readCsvFile(file, next => { takeFile(next); onFile?.(); }, error => { setFileError(error); onFile?.(); }); }} />
       <p className="mb-2 text-ink-soft max-w-2xl">Upload the final recipient list after the seminar. Only <code>google_account</code> is required. If the file has <code>full_name</code> and <code>program</code>, they prefill registration for attendees who don't have an account yet; other columns are ignored.</p>
       <p className="mb-6 text-sm text-ink-muted max-w-2xl">This list replaces saved attendance for this seminar: students left out are marked absent. Nothing is saved until you confirm.</p>
       {/* Once attendance is confirmed, the upload box stays out of the way unless the list needs correcting. */}
@@ -62,7 +68,7 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
         note="Correcting replaces the whole list. Students with an issued certificate cannot be removed."
         action="Correct attendance" onAction={() => { review.reset(); save.reset(); setCorrecting(true); }} disabled={busy} /> : <>
         <CsvDropZone id={'attendance-csv-' + seminarID} title="Drop the attendance CSV" draft={draft} disabled={busy}
-          onDraft={next => { setFileError(''); review.reset(); save.reset(); setDraft(next); }} onError={setFileError} />
+          onDraft={takeFile} onError={setFileError} />
         {correcting && !draft && <Btn variant="ghost" size="sm" className="mt-3" onClick={() => setCorrecting(false)}>Cancel</Btn>}
       </>}
       {fileError && <p role="alert" className="mt-3 text-sm text-revoked">{fileError}</p>}
@@ -111,7 +117,7 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
         ? <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
           {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
         </Btn>
-        : <Btn variant="line" iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>, actionSlot)}
+        : <Btn iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>, actionSlot)}
     </div>
   );
 }

@@ -44,7 +44,10 @@ router.get("/faculty/certificates", async (req, res) => {
   // shortcut: newest 200 matches only, no paging; add paging when a search routinely returns more.
   const { rows } = await pool.query(
     `SELECT c."certificateNo", c."recipientName", c."seminarTitle", to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate",
-            c."certificateHash", c."status", c."issuedAt", c."revokedAt", u."email"
+            c."certificateHash", c."status", c."issuedAt", c."revokedAt", u."email",
+            -- A revoked certificate is replaced once its registration has a non-revoked certificate (see activeCertificate).
+            (c."status" = 'REVOKED' AND EXISTS (SELECT 1 FROM certificate r WHERE r."seminarID" = c."seminarID"
+              AND r."studentID" = c."studentID" AND r."status" <> 'REVOKED')) AS "replaced"
      FROM certificate c JOIN student s ON s."studentID" = c."studentID" JOIN users u ON u."userID" = s."userID"
      WHERE c."status" = ANY($1) AND ($2 = '' OR c."certificateNo"::text = $3 OR c."recipientName" ILIKE '%' || $2 || '%'
        OR u."email" ILIKE '%' || $2 || '%' OR c."seminarTitle" ILIKE '%' || $2 || '%')

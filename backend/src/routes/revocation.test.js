@@ -178,6 +178,8 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     const facts = { recipientName: "  Juan P. Dela Cruz ", seminarTitle: "Web Security Fundamentals", seminarDate: "2026-11-08" };
     const replace = (certificate, body = facts, session) => request(`${certificate.no}/replacement`, { session, body });
     assert.equal((await request(String(original.no))).data.replacement, null);
+    const registryRow = async () => (await request("?q=" + original.no)).data.find(row => String(row.certificateNo) === String(original.no));
+    assert.equal((await registryRow()).replaced, false);
     assert.equal((await replace(original, facts, assistant)).status, 403);
     for (const body of [{ ...facts, recipientName: " " }, { ...facts, seminarTitle: "x".repeat(256) }, { ...facts, seminarTitle: "a\u0007b" },
       { ...facts, seminarDate: "2026-02-30" }, { ...facts, seminarDate: "11/08/2026" }, {}]) {
@@ -196,6 +198,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
       studentWalletID: 1, authorizedBy: 1, certificateHash: null });
     assert.equal(chain.sendCount, sends, "preparing a replacement sends no transaction");
     assert.deepEqual((await request(String(original.no))).data.replacement, { certificateNo: created.data.certificateNo, status: "PENDING" });
+    assert.equal((await registryRow()).replaced, true, "the registry flags a revoked certificate that has a replacement");
     assert.match((await replace(original)).data.error, new RegExp(`No\\. ${created.data.certificateNo}`));
     const absent = await issuedCertificate();
     await db.query(`UPDATE certificate SET status='REVOKED',"revokedAt"=now() WHERE "certificateID"=$1;`, [absent.id]);
@@ -229,7 +232,8 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     assert.ok(all.data.some(row => row.status === "REVOKED") && all.data.some(row => row.status === "ISSUED"));
     const times = all.data.map(row => Date.parse(row.issuedAt));
     assert.deepEqual(times, [...times].sort((a, b) => b - a));
-    assert.deepEqual(Object.keys(all.data[0]).sort(), ["certificateHash", "certificateNo", "email", "issuedAt", "recipientName", "revokedAt", "seminarDate", "seminarTitle", "status"]);
+    assert.deepEqual(Object.keys(all.data[0]).sort(), ["certificateHash", "certificateNo", "email", "issuedAt", "recipientName", "replaced", "revokedAt", "seminarDate", "seminarTitle", "status"]);
+    assert.ok(all.data.every(row => row.status === "REVOKED" || row.replaced === false));
     const revoked = await request("?status=REVOKED");
     assert.ok(revoked.data.length > 0 && revoked.data.every(row => row.status === "REVOKED"));
     const target = all.data.at(-1);

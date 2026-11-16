@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Btn } from './design-system';
-
-const MAX_BYTES = 1024 * 1024;
+import { readCsvFile } from '../lib/csvFile';
 
 // Drag-and-drop or browse for a CSV; hands back { name, csv } text so the parent can keep it as a draft.
 export default function CsvDropZone({ id, title, draft, onDraft, onError, disabled }) {
@@ -9,10 +8,7 @@ export default function CsvDropZone({ id, title, draft, onDraft, onError, disabl
   const [drag, setDrag] = useState(false);
 
   async function read(file) {
-    if (!file) return;
-    if (file.size === 0 || file.size > MAX_BYTES) return onError('Choose a non-empty CSV file up to 1 MB.');
-    try { onDraft({ name: file.name, csv: await file.text() }); }
-    catch { onError('The file could not be read. Choose it again.'); }
+    await readCsvFile(file, onDraft, onError);
     if (input.current) input.current.value = '';
   }
 

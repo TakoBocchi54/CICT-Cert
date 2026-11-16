@@ -60,10 +60,8 @@ function Modal({ labelledBy, busy, onClose, children }) {
 export default function RevocationPage({ initialNo = '', onBack }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
-  const [query, setQuery] = useState(initialNo);
-  // Opened from the Registry with ?no=: look that certificate up straight away.
+  // Opened from a Registry row's Revoke/Details with ?no=.
   const [certificateNo, setCertificateNo] = useState(/^[1-9]\d{0,18}$/.test(initialNo) ? initialNo : null);
-  const [invalidQuery, setInvalidQuery] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [reason, setReason] = useState('');
   // Corrected facts for a replacement; the replacement dialog is open while this is set.
@@ -91,17 +89,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
     onSettled: refresh,
   });
 
-  const lookUp = (value) => {
-    const valid = /^[1-9]\d{0,18}$/.test(value);
-    revoke.reset(); check.reset(); replace.reset();
-    setInvalidQuery(!valid);
-    setCertificateNo(valid ? value : null);
-  };
-  const search = (event) => {
-    event.preventDefault();
-    lookUp(query.trim().replace(/^#/, ''));
-  };
-  const openCertificate = (number) => { setQuery(number); lookUp(number); };
+  const openCertificate = (number) => { revoke.reset(); check.reset(); replace.reset(); setCertificateNo(String(number)); };
 
   const found = lookup.data;
   const revocation = found?.revocation;
@@ -129,23 +117,9 @@ export default function RevocationPage({ initialNo = '', onBack }) {
         </p>
       </div>
 
-      <form onSubmit={search} className="mb-6" role="search">
-        <label htmlFor="certificate-number" className="eyebrow mb-2 block">Certificate number</label>
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <i className="ph ph-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-ink-muted" aria-hidden="true"></i>
-            <input id="certificate-number" value={query} onChange={e => setQuery(e.target.value)} inputMode="numeric" autoComplete="off"
-              aria-invalid={invalidQuery || undefined} aria-describedby="certificate-number-hint"
-              className="field !pl-11 font-mono" placeholder="e.g. 1024" />
-          </div>
-          <Btn type="submit" disabled={!query.trim() || lookup.isFetching}>{lookup.isFetching ? 'Finding...' : 'Find'}</Btn>
-        </div>
-        <p id="certificate-number-hint" className={'mt-1.5 text-xs ' + (invalidQuery ? 'text-revoked' : 'text-ink-muted')} role={invalidQuery ? 'alert' : undefined}>
-          {invalidQuery ? 'Certificate numbers contain digits only.' : 'The number printed on the certificate, or pick one from the Registry.'}
-        </p>
-      </form>
-
-      {!certificateNo ? null : lookup.isPending ? (
+      {!certificateNo ? (
+        <Note icon="ph-info">Pick a certificate in the Registry and choose Revoke or Details to open it here.</Note>
+      ) : lookup.isPending ? (
         <div role="status" className="sheet flex items-center justify-center gap-3 p-12 text-sm text-ink-soft">
           <i className="ph-bold ph-circle-notch animate-spin text-lg" aria-hidden="true"></i>Looking up certificate No. {certificateNo}...
         </div>

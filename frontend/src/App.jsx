@@ -355,6 +355,8 @@ function AppContent() {
                   <FacultyDashboardPage
                     onIssueClick={seminarID => navigate('/faculty/issue' + (seminarID ? '?seminar=' + encodeURIComponent(seminarID) : ''))}
                     onNavigateRevocation={() => navigate('/faculty/registry?status=REVOKED')}
+                    onNavigateSeminars={() => navigate('/faculty/seminars')}
+                    onNavigateRegistry={() => navigate('/faculty/registry')}
                   />
                 </main>
               </>

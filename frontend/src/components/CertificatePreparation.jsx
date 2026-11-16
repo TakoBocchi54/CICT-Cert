@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
@@ -8,7 +9,8 @@ import { certificateProgress } from '../lib/certificateProgress';
 const count = (n, noun = 'certificate') => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 // mode 'review': prepare certificates and check the list (names can be corrected). mode 'issue': mint every ready certificate in batches.
-export default function CertificatePreparation({ seminarID, disabled, mode }) {
+// onDone: where the Done button goes once everything issuable is issued (issue mode). Issue/Done render into actionSlot, the wizard footer.
+export default function CertificatePreparation({ seminarID, disabled, mode, onDone, actionSlot }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [reviewingIssuance, setReviewingIssuance] = useState(false);
@@ -61,47 +63,32 @@ export default function CertificatePreparation({ seminarID, disabled, mode }) {
   const ready = certificates.data?.filter(certificate => unissued(certificate) && certificate.attended && certificate.walletConnected) || [];
   const pending = certificates.data?.some(certificate => certificate.transactionStatus === 'PENDING');
   const outcome = issue.data || check.data;
-  return <div>
-    {mode === 'review' ? <>
-      <p className="mb-2 text-ink-soft max-w-2xl">Check every name below: it is printed on the certificate exactly as shown, and students see the same name in their portal. Correct a name here before issuing; after issuance a correction needs revocation and a new certificate.</p>
-      <p className="mb-5 text-sm text-ink-muted max-w-2xl">Prepare certificates once attendance is marked (importing a CSV prepares them automatically). Run it again after marking more attendees; existing numbers are kept. Students agreed to receive certificates when they linked their wallet, so there is no approval step. This does not mint or spend POL.</p>
-      <div className="flex flex-wrap gap-3">
-        <Btn variant="line" disabled={busy || !canIssue} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Preparing...' : 'Prepare certificates'}</Btn>
-        <Btn variant="ghost" icon="ph-arrows-clockwise" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh list</Btn>
+  // Nothing left to issue and nothing in flight: the seminar is finished (those still without a wallet can't be issued yet).
+  const done = !ready.length && !pending && !issue.isPending && !!certificates.data?.some(certificate => certificate.status === 'ISSUED');
+  // Issue mode fills the step panel so its actions sit at the bottom, just above the wizard's Back button.
+  return <div className={mode === 'issue' ? 'flex flex-1 flex-col' : undefined}>
+    {mode === 'review' ? <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div>
+        <h2 className="font-serif text-2xl font-medium">Names on certificates</h2>
+        <p className="mt-1 text-sm text-ink-muted">Printed exactly as shown. Correct any name before issuing.</p>
       </div>
-      {faculty.error && <p role="alert" className="mt-3 text-sm text-revoked">{faculty.error.message}</p>}
-      {faculty.data && !canIssue && <p className="mt-3 text-sm text-ink-soft">Your faculty account needs issuance permission to prepare certificates or correct names.</p>}
-      {prepare.error && <p role="alert" className="mt-4 text-sm text-revoked">{prepare.error.message}</p>}
-      {prepare.data && <p role="status" className="mt-4 text-sm text-verified">{prepare.data.prepared} certificates prepared; {prepare.data.alreadyPrepared} attendees already have certificate records; {prepare.data.awaitingWallet} attendees need wallet setup.</p>}
-    </> : <div className="rounded-2xl border border-[var(--line)] bg-paper p-5 space-y-3">
-      <p className="font-serif text-4xl font-medium leading-none">{ready.length}</p>
-      <p className="eyebrow">Ready to issue</p>
-      <p className="text-sm text-ink-soft">Every confirmed attendee with a linked wallet is issued together: one transaction stores the batch's Merkle root and mints its tokens. Large seminars are sent as several batches. The issuer wallet pays Amoy POL for each transaction.</p>
-      {pending && <p className="text-sm text-pending">A batch transaction is confirming. Check it before issuing more certificates.</p>}
-      {pending && <Btn variant="line" size="sm" disabled={busy || !canIssue} onClick={() => { issue.reset(); check.mutate(); }}>{check.isPending ? 'Checking...' : 'Check transaction'}</Btn>}
-      {reviewingIssuance ? <div role="alert" className="rounded-xl p-4 text-sm space-y-3" style={{ background: '#fbf1dc', border: '1px solid #ecd5a2', color: '#8a5508' }}>
-        <p className="font-medium"><i className="ph-fill ph-warning mr-1" aria-hidden="true"></i>Issue {count(ready.length)} on Polygon Amoy? Issued details cannot be edited; a correction needs revocation and a new certificate. Leaving the page stops the remaining batches, but a submitted transaction can still finish.</p>
-        <div className="flex flex-wrap gap-3"><Btn icon="ph-stamp" disabled={busy || pending || !ready.length || !canIssue} onClick={() => issue.mutate()}>Confirm issuance on Amoy</Btn><Btn variant="line" disabled={busy} onClick={() => setReviewingIssuance(false)}>Cancel</Btn></div>
-      </div> : <Btn icon="ph-stamp" disabled={busy || pending || !ready.length || !canIssue || certificates.isFetching} onClick={() => { issue.reset(); check.reset(); setReviewingIssuance(true); }}>Issue {count(ready.length)}</Btn>}
-      {progress && <p role="status" className="text-sm">{progress}</p>}
-      {issue.error && <p role="alert" className="text-sm text-revoked">{issue.error.message}</p>}
-      {issue.data && <p role="status" className="text-sm text-verified">{issue.data.message}</p>}
-      {check.error && <p role="alert" className="text-sm text-revoked">{check.error.message}</p>}
-      {check.data && <p role="status" className="text-sm">{check.data.warning || (check.data.transactionStatus === 'CONFIRMED' ? `Batch confirmed: ${count(check.data.issued)} issued.` : check.data.transactionStatus === 'FAILED' ? 'The batch transaction reverted. Its certificates can be issued again after resolving the cause.' : check.data.transactionStatus === 'PENDING' ? 'Transaction is pending. Check again shortly.' : 'No transaction is pending.')}</p>}
-      {outcome?.skipped?.length > 0 && <div className="text-sm text-ink-soft">
-        <p className="font-medium">Not issued ({outcome.skipped.length}):</p>
-        <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-auto pl-5">
-          {outcome.skipped.map(skipped => <li key={skipped.certificateNo}>No. {skipped.certificateNo}, {skipped.recipientName}: {skipped.reason}</li>)}
-        </ul>
-      </div>}
+      {certificates.data?.length > 0 && <p className="text-sm text-ink-soft tabular-nums">{count(certificates.data.length)}</p>}
+    </div> : <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div>
+        <h2 className="font-serif text-2xl font-medium">Certificates to issue</h2>
+        <p className="mt-1 text-sm text-ink-muted">Minted on Polygon Amoy in batches. The issuer wallet pays the gas.</p>
+      </div>
+      <p className="text-sm text-ink-soft tabular-nums">{ready.length} ready</p>
     </div>}
-    {certificates.isPending ? <p role="status" className="mt-4">Loading certificates...</p> : certificates.error ? <p role="alert" className="mt-4 text-sm text-revoked">{certificates.error.message}</p> : !certificates.data.length ? <p className="mt-4 text-sm text-ink-soft">No certificates prepared yet.</p> : <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--line)]">
+    {certificates.isPending ? <p role="status" className="mt-4">Loading certificates...</p> : certificates.error ? <p role="alert" className="mt-4 text-sm text-revoked">{certificates.error.message}</p> : !certificates.data.length ? <p className="mt-4 rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">
+      No certificates prepared yet.{mode === 'review' ? ' Prepare them for everyone marked attended.' : ' Prepare them in the Review step.'}</p> : <div className="mt-4 max-h-[480px] overflow-auto rounded-xl border border-[var(--line)]">
       <table className="w-full min-w-[500px] text-left text-sm">
         <caption className="sr-only">Prepared certificates: the name printed on each and its progress</caption>
-        <thead className="bg-paper-2"><tr><th scope="col" className="p-3">Number</th><th scope="col" className="p-3">Name on certificate</th><th scope="col" className="p-3">Progress</th></tr></thead>
-        <tbody>{certificates.data.map(certificate => <tr key={certificate.certificateID} className="border-t border-[var(--line)]">
-          <td className="p-3 font-mono">{certificate.certificateNo}</td>
-          <td className="p-3">
+        <thead className="sticky top-0 z-10 bg-paper-2"><tr>{['No.', 'Name on certificate', 'Progress'].map(head =>
+          <th key={head} scope="col" className="eyebrow px-4 py-3 font-semibold">{head}</th>)}</tr></thead>
+        <tbody className="divide-y divide-[var(--line)]">{certificates.data.map(certificate => <tr key={certificate.certificateID} className="align-top hover:bg-paper">
+          <td className="px-4 py-3 font-mono">{certificate.certificateNo}</td>
+          <td className="px-4 py-3">
             {editing?.id === certificate.certificateID ? <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); if (!busy) rename.mutate(editing); }}>
               <label htmlFor={`recipient-name-${certificate.certificateID}`} className="sr-only">Name on certificate No. {certificate.certificateNo}</label>
               <input id={`recipient-name-${certificate.certificateID}`} className="field !py-1.5 !text-sm min-w-0 flex-1" required maxLength={255} autoComplete="off" autoFocus
@@ -117,7 +104,7 @@ export default function CertificatePreparation({ seminarID, disabled, mode }) {
                 onClick={() => { rename.reset(); setEditing({ id: certificate.certificateID, name: certificate.recipientName }); }}>Correct name</Btn>}
             </>}
           </td>
-          <td className="p-3">
+          <td className="px-4 py-3">
             {certificateProgress(certificate)}
             {certificate.tokenID && <span className="mt-1 block text-xs">Token #{certificate.tokenID}</span>}
             {certificate.transactionHash && <a className="mt-1 block text-xs text-forest underline" href={`https://amoy.polygonscan.com/tx/${certificate.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>}
@@ -126,5 +113,84 @@ export default function CertificatePreparation({ seminarID, disabled, mode }) {
         </tr>)}</tbody>
       </table>
     </div>}
+    {mode === 'issue' && <div className="mt-auto space-y-3 pt-6">
+      {pending && <div className="flex flex-wrap items-center gap-3 rounded-xl bg-pending-bg px-4 py-3 text-sm text-pending">
+        <i className="ph-bold ph-hourglass-medium text-base" aria-hidden="true"></i>
+        <span className="flex-1">A batch is confirming. Check it before issuing more.</span>
+        <Btn variant="line" size="sm" disabled={busy || !canIssue} onClick={() => { issue.reset(); check.mutate(); }}>{check.isPending ? 'Checking...' : 'Check transaction'}</Btn>
+      </div>}
+      {reviewingIssuance && <IssueConfirmDialog total={ready.length} disabled={busy || pending || !ready.length || !canIssue}
+        onConfirm={() => issue.mutate()} onClose={() => setReviewingIssuance(false)} />}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Issue, then Done once nothing is left, sit at the right of the wizard footer. */}
+        {actionSlot && createPortal(done ? <Btn icon="ph-check" onClick={onDone}>Done</Btn>
+          : <Btn icon="ph-stamp" disabled={busy || pending || !ready.length || !canIssue || certificates.isFetching} onClick={() => { issue.reset(); check.reset(); setReviewingIssuance(true); }}>
+            {issue.isPending ? 'Issuing...' : `Issue ${count(ready.length)}`}</Btn>, actionSlot)}
+        <Btn variant="ghost" icon="ph-arrows-clockwise" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh</Btn>
+      </div>
+      {faculty.data && !canIssue && <p className="text-sm text-ink-soft">You need issuance permission to issue certificates.</p>}
+      {progress && <p role="status" className="flex items-center gap-2 text-sm"><i className="ph-bold ph-circle-notch animate-spin" aria-hidden="true"></i>{progress}</p>}
+      {issue.error && <p role="alert" className="text-sm text-revoked">{issue.error.message}</p>}
+      {issue.data && <p role="status" className="text-sm text-verified">{issue.data.message}</p>}
+      {check.error && <p role="alert" className="text-sm text-revoked">{check.error.message}</p>}
+      {check.data && <p role="status" className="text-sm">{check.data.warning || (check.data.transactionStatus === 'CONFIRMED' ? `Batch confirmed: ${count(check.data.issued)} issued.` : check.data.transactionStatus === 'FAILED' ? 'The batch transaction reverted. Its certificates can be issued again after resolving the cause.' : check.data.transactionStatus === 'PENDING' ? 'Transaction is pending. Check again shortly.' : 'No transaction is pending.')}</p>}
+      {outcome?.skipped?.length > 0 && <div className="text-sm text-ink-soft">
+        <p className="font-medium">Not issued ({outcome.skipped.length}):</p>
+        <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-auto pl-5">
+          {outcome.skipped.map(skipped => <li key={skipped.certificateNo}>No. {skipped.certificateNo}, {skipped.recipientName}: {skipped.reason}</li>)}
+        </ul>
+      </div>}
+    </div>}
+    {mode === 'review' && <>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Btn variant={certificates.data?.length ? 'line' : 'primary'} icon="ph-stack" disabled={busy || !canIssue} onClick={() => prepare.mutate()}
+          title="Creates a numbered certificate for each attendee. Run again after marking more attendees; nothing is minted.">
+          {prepare.isPending ? 'Preparing...' : 'Prepare certificates'}</Btn>
+        <Btn variant="ghost" icon="ph-arrows-clockwise" disabled={busy || certificates.isFetching} onClick={() => certificates.refetch()}>Refresh</Btn>
+      </div>
+      {faculty.error && <p role="alert" className="mt-3 text-sm text-revoked">{faculty.error.message}</p>}
+      {faculty.data && !canIssue && <p className="mt-3 text-sm text-ink-soft">You need issuance permission to prepare certificates or correct names.</p>}
+      {prepare.error && <p role="alert" className="mt-3 text-sm text-revoked">{prepare.error.message}</p>}
+      {prepare.data && <p role="status" className="mt-3 text-sm text-verified">
+        {count(prepare.data.prepared)} prepared{prepare.data.awaitingWallet > 0 && ` · ${prepare.data.awaitingWallet} attendee${prepare.data.awaitingWallet === 1 ? '' : 's'} still need a wallet`}.</p>}
+    </>}
   </div>;
+}
+
+// The short "are you sure" before minting, as a modal like the app's other dialogs.
+function IssueConfirmDialog({ total, disabled, onConfirm, onClose }) {
+  const dialog = useRef(null);
+  useEffect(() => { dialog.current.showModal(); }, []);
+  return createPortal(
+    <dialog ref={dialog} aria-labelledby="issue-confirm-title" aria-describedby="issue-confirm-text"
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      className="pop m-auto w-[calc(100%_-_2rem)] max-w-md rounded-2xl border border-paper-3 bg-paper p-0 text-ink shadow-xl backdrop:bg-[rgba(22,35,29,.45)] backdrop:backdrop-blur-sm">
+      <div className="p-6 sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-forest text-xl text-white shadow" aria-hidden="true">
+            <i className="ph-bold ph-stamp"></i>
+          </span>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="-mr-2 -mt-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-muted hover:bg-black/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest">
+            <i className="ph-bold ph-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p className="eyebrow mt-5">Final step</p>
+        <h2 id="issue-confirm-title" className="mt-1 font-serif text-3xl font-medium leading-tight">Issue {count(total)}?</h2>
+        <p id="issue-confirm-text" className="mt-2 text-sm text-ink-soft">Once issued, certificates can't be edited.</p>
+        <dl className="mt-5 grid grid-cols-2 divide-x divide-[var(--line)] rounded-xl border border-[var(--line)] bg-paper-2">
+          <div className="px-4 py-3"><dt className="eyebrow">Certificates</dt><dd className="mt-1 font-serif text-2xl tabular-nums">{total}</dd></div>
+          <div className="px-4 py-3"><dt className="eyebrow">Network</dt><dd className="mt-1 flex items-center gap-1.5 pt-1.5 text-sm font-semibold">
+            <i className="ph-bold ph-link-simple text-forest" aria-hidden="true"></i>Polygon Amoy</dd></div>
+        </dl>
+        <p className="mt-4 flex items-center gap-2 rounded-xl bg-pending-bg px-3 py-2 text-xs font-medium text-ink-soft">
+          <i className="ph-bold ph-info text-sm text-pending" aria-hidden="true"></i>Keep this page open until it finishes.</p>
+        <div className="mt-6 flex gap-3">
+          <Btn type="button" variant="line" className="flex-1" onClick={onClose}>Cancel</Btn>
+          <Btn type="button" icon="ph-stamp" className="flex-1" disabled={disabled} onClick={onConfirm}>Issue now</Btn>
+        </div>
+      </div>
+    </dialog>,
+    document.body,
+  );
 }
