@@ -19,7 +19,7 @@ const SAMPLE_CERT = {
   confirmations: 128
 };
 
-export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetup = false }) {
+export default function LoginPage({ onLogin, needsWalletSetup = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
@@ -50,7 +50,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
   // Disconnect Web3Auth when switching to faculty role
   useEffect(() => {
     if (role === 'faculty' && studentSession.status !== 'idle') {
-      console.log('Switching to faculty - disconnecting Web3Auth');
       disconnect();
     }
   }, [role, studentSession.status, disconnect]);
@@ -59,7 +58,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
   useEffect(() => {
     const shouldDisconnect = searchParams.get('disconnect') === 'true';
     if (shouldDisconnect) {
-      console.log('Disconnecting Web3Auth due to sign out...');
       setManualDisconnect(true);
       setHasLoggedIn(false);
       disconnect();
@@ -175,7 +173,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
         <Lockup />
         
         <div className="relative">
-          <div className="eyebrow mb-5">College of Information and Communications Technology</div>
           <h1 className="font-serif text-[64px] leading-[1.02] font-medium max-w-xl">
             Every seminar you attend, <span className="italic text-forest-600">on the record.</span>
           </h1>
@@ -188,7 +185,7 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
         </div>
         
         <div className="relative text-sm text-ink-muted">
-          University of Batangas · Seminar Credential Registry
+          College of Information and Communications Technology · University of Batangas
         </div>
       </section>
 
@@ -199,7 +196,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
             <Lockup />
           </div>
           
-          <div className="eyebrow mb-3">Sign in</div>
           <h2 className="font-serif text-4xl font-medium mb-8">Welcome to CICT-Cert.</h2>
           
           {/* Role Toggle */}
@@ -339,21 +335,6 @@ export default function LoginPage({ onLogin, onNavigateVerifier, needsWalletSetu
             )}
           </form>
           {showConsent && <ConsentDialog onClose={() => setShowConsent(false)} />}
-
-          {/* Public Verifier CTA */}
-          <div className="mt-10 pt-8 hair">
-            <p className="text-sm text-ink-muted mb-3">
-              Checking someone else's certificate? No account needed.
-            </p>
-            <Btn 
-              variant="line" 
-              className="w-full" 
-              icon="ph-seal-check" 
-              onClick={onNavigateVerifier}
-            >
-              Open public verifier
-            </Btn>
-          </div>
         </div>
       </section>
     </div>

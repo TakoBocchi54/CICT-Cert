@@ -31,7 +31,7 @@ export const Seal = ({ status = 'Verified', size = 96, animate = false }) => {
       <circle cx="60" cy="60" r="55" fill={c} />
       <circle cx="60" cy="60" r="50" fill="none" stroke="#fff" strokeOpacity=".55" strokeWidth=".8" />
       <circle cx="60" cy="60" r="27" fill="none" stroke="#fff" strokeOpacity=".7" strokeWidth="1" />
-      <g className="ring-spin">
+      <g>
         <text fill="#fff" fontSize="8.2" fontWeight="700" letterSpacing="1.2" fontFamily="Inter">
           <textPath href={'#arc' + uid} textLength="250" lengthAdjust="spacing">{word}</textPath>
         </text>

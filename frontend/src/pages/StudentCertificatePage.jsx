@@ -53,7 +53,7 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
       {back}
       <h1 className="sr-only">Certificate #{cert.id}: {cert.seminar}</h1>
       <div className="grid items-start gap-8 lg:grid-cols-12">
-        <div className="rise lg:col-span-8">
+        <div className="lg:col-span-8">
           <Certificate cert={cert} tilt={false} verificationUrl={certificateVerificationUrl(cert.hash, window.location.origin)} />
           <div className="mt-5 flex flex-wrap gap-3">
             <Btn icon="ph-download-simple" onClick={() => onDownload(cert)}>Download PDF</Btn>
@@ -61,9 +61,9 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
           </div>
           {proof.error && <p role="alert" className="mt-3 text-sm text-revoked">{proof.error.message}</p>}
         </div>
-        <aside className="rise space-y-6 lg:col-span-4" style={{ '--d': '.1s' }}>
+        <aside className="space-y-6 lg:col-span-4">
           <section className="sheet p-7 text-center">
-            <div className="flex justify-center"><Seal status={cert.status} size={120} animate /></div>
+            <div className="flex justify-center"><Seal status={cert.status} size={120} /></div>
             <h2 className="mt-4 font-serif text-3xl font-medium">{title}</h2>
             <p className="mt-2 text-sm text-ink-soft">{description}</p>
           </section>

@@ -41,12 +41,7 @@ export default function TemplatesPage() {
     <div className="pb-16">
       <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div>
-          <div className="eyebrow mb-3 rise">Templates</div>
-          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Certificate designs</h1>
-          <p className="text-ink-soft text-lg mt-4 max-w-2xl rise" style={{ '--d': '.1s' }}>
-            Upload a background designed elsewhere (Canva, Photoshop…) and place the student's name, the seminar, the date, the QR code and signatures on it.
-            Choose a design for each seminar when you create or edit it.
-          </p>
+          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Certificate designs</h1>
         </div>
         <div className="flex flex-col items-end gap-1">
           <input ref={input} type="file" accept="image/png,image/jpeg" className="sr-only" tabIndex={-1} aria-hidden="true"
@@ -55,7 +50,6 @@ export default function TemplatesPage() {
             {upload.isPending ? 'Uploading...' : 'New template'}</Btn>
         </div>
       </div>
-      <p className="mb-6 text-sm text-ink-muted">PNG or JPG up to {MAX_TEMPLATE_MB} MB, sized {SIZES}.</p>
       {(fileError || upload.error) && <p role="alert" className="mb-6 text-sm text-revoked">{fileError || upload.error.message}</p>}
 
       {templates.isPending ? <p role="status">Loading templates...</p> : templates.error ? (

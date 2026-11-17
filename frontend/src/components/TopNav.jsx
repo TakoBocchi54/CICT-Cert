@@ -51,14 +51,6 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
         </nav>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => onNavigate('verify')}
-            className="hidden! sm:flex! btn btn-line btn-sm"
-          >
-            <i className="ph-bold ph-seal-check text-verified"></i>
-            Public verifier
-          </button>
-
           <div className="hidden lg:block text-right leading-tight">
             <div className="text-sm font-semibold">{userName || 'User'}</div>
             <div className="text-xs text-ink-muted">{userTitle || (role === 'faculty' ? 'Faculty' : 'Student')}</div>

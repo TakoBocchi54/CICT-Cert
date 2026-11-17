@@ -110,9 +110,8 @@ export default function RevocationPage({ initialNo = '', onBack }) {
       </button>}
 
       <div className="mb-8 text-center">
-        <div className="eyebrow mb-3 rise">Registry</div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Revocations</h1>
-        <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft rise" style={{ '--d': '.1s' }}>
+        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Revocations</h1>
+        <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">
           Invalidate an issued certificate on Polygon Amoy, or prepare a corrected replacement for a revoked one.
         </p>
       </div>

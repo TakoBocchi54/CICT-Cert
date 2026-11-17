@@ -110,7 +110,6 @@ function AppContent() {
         studentID: userData.studentID,
         walletAddress: userData.walletAddress
       });
-      console.log('Navigating to student dashboard...');
       navigate('/student/dashboard');
     }
   };
@@ -146,7 +145,6 @@ function AppContent() {
       'faculty-registry': '/faculty/registry',
       'faculty-templates': '/faculty/templates',
       'faculty-account': '/faculty/account',
-      'verify': '/verify',
     };
     navigate(routes[view] || '/');
   };
@@ -225,7 +223,6 @@ function AppContent() {
             ) : (
               <LoginPage
                 onLogin={handleLogin}
-                onNavigateVerifier={() => navigate('/verify')}
                 needsWalletSetup={needsWalletSetup}
                 />
             )

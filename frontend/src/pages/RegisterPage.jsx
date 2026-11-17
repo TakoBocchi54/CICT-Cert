@@ -77,7 +77,6 @@ export default function RegisterPage({ onLogin }) {
     <main className="min-h-screen bg-paper px-4 py-10">
       <div className="mx-auto w-full max-w-[460px]">
         <div className="mb-10"><Lockup /></div>
-        <div className="eyebrow mb-3">Seminar registration</div>
         {seminar && <div className="mb-8">
           <h1 className="font-serif text-4xl font-medium leading-tight break-words">{seminar.seminarTitle}</h1>
           <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-soft">

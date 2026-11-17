@@ -52,10 +52,9 @@ export default function StudentsPage() {
   return (
     <div className="pb-16 md:pb-24">
       <div className="mb-10">
-        <div className="eyebrow mb-3 rise">Accounts</div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Students</h1>
-        <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
-          Register a student's Google account so they can sign in. Seminar attendance is matched to these accounts by email.
+        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Students</h1>
+        <p className="text-ink-soft text-lg mt-4 max-w-xl">
+          Register a student's Google account.
         </p>
       </div>
 
@@ -112,15 +111,15 @@ export default function StudentsPage() {
               <thead className="bg-paper-2"><tr>
                 <th scope="col" className="p-3">Name</th><th scope="col" className="p-3">Program</th>
                 <th scope="col" className="p-3">Google account</th><th scope="col" className="p-3">Wallet</th>
-                <th scope="col" className="p-3 text-right">Seminars</th><th scope="col" className="p-3 text-right">Certificates</th>
+                <th scope="col" className="p-3 text-center">Seminars</th><th scope="col" className="p-3 text-center">Certificates</th>
                 {canRemove && <th scope="col" className="p-3"><span className="sr-only">Actions</span></th>}
               </tr></thead>
               <tbody>{students.data.map(student => <tr key={student.studentID} className="border-t border-[var(--line)]">
                 <td className="p-3">{student.fullName}</td><td className="p-3">{student.program}</td>
                 <td className="break-all p-3">{student.email}</td>
                 <td className="p-3">{student.walletConnected ? 'Connected' : <span className="text-ink-muted">Not signed in yet</span>}</td>
-                <td className="p-3 text-right tabular-nums">{student.seminarsAttended}</td>
-                <td className="p-3 text-right tabular-nums">{student.certificates}</td>
+                <td className="p-3 text-center tabular-nums">{student.seminarsAttended}</td>
+                <td className="p-3 text-center tabular-nums">{student.certificates}</td>
                 {canRemove && <td className="p-3 text-right">{student.removable &&
                   <Btn variant="ghost" size="sm" onClick={() => { remove.reset(); setRemoving(student); }}>Remove</Btn>}</td>}
               </tr>)}</tbody>

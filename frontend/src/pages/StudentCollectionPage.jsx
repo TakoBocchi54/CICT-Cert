@@ -12,11 +12,10 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
     return (
       <div>
         <div className="mb-10">
-          <div className="eyebrow mb-3 rise">0 credentials</div>
-          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>
+          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">
             Your collection
           </h1>
-          <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
+          <p className="text-ink-soft text-lg mt-4 max-w-xl">
             Your verified seminar certificates will appear here.
           </p>
         </div>
@@ -38,12 +37,11 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
     <div>
       {/* Page Header */}
       <div className="mb-10">
-        <div className="eyebrow mb-3 rise">{certificates.length} credentials</div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>
+        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">
           Your collection
         </h1>
-        <p className="text-ink-soft text-lg mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
-          Hover a certificate to see its on-chain status.
+        <p className="text-ink-soft text-lg mt-4 max-w-xl">
+          {certificates.length} {certificates.length === 1 ? 'credential' : 'credentials'}. Hover a certificate to see its on-chain status.
         </p>
       </div>
 
@@ -75,8 +73,8 @@ export default function StudentCollectionPage({ certificates = [], onCertificate
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-x-8 gap-y-12">
-          {filteredList.map((c, i) => (
-            <div key={c.id} className="rise" style={{ '--d': i * 0.06 + 's' }}>
+          {filteredList.map(c => (
+            <div key={c.id}>
               <div className="cursor-pointer" onClick={() => onCertificateClick(c)}>
                 <Certificate cert={c} />
               </div>

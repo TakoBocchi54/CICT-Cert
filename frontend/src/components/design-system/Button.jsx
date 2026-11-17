@@ -1,7 +1,7 @@
 export const Btn = ({ children, variant = 'primary', className = '', icon, iconRight, size, ...rest }) => (
   <button className={`btn btn-${variant} ${size === 'sm' ? 'btn-sm' : ''} ${className}`} {...rest}>
-    {icon && <i className={'ph-bold ' + icon}></i>}
+    {icon && <i className={'ph-bold ' + icon} aria-hidden="true"></i>}
     {children}
-    {iconRight && <i className={'ph-bold arrow ' + iconRight}></i>}
+    {iconRight && <i className={'ph-bold arrow ' + iconRight} aria-hidden="true"></i>}
   </button>
 );

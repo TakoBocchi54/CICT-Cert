@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Lockup, Seal, Btn, Pill, Rosette, Certificate } from '../components/design-system';
 import { useCertificateVerification } from '../hooks/useCertificateVerification';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
@@ -51,14 +50,14 @@ const Row = ({ label, children, mono }) => (
   </div>
 );
 
+// Only reachable through a certificate's QR code (/verify?id=<hash>); there is no manual hash entry.
 export default function VerifierPortalPage({
   initialId = '',
   onBackToPortal,
   loggedIn = false,
 }) {
-  const [input,setInput] = useState(initialId);
-  const [submittedHash, setSubmittedHash] = useState(initialId.trim());
-  const [inputError, setInputError] = useState('');
+  const id = initialId.trim();
+  const submittedHash = /^0x[0-9a-fA-F]{64}$/.test(id) ? id : '';
 
   const verification = useCertificateVerification(submittedHash);
   const result = verification.data;
@@ -70,34 +69,10 @@ export default function VerifierPortalPage({
       : 'idle';
 
   const banner = result ? RESULTS[result.status] : null;
-  const error = inputError || verification.error?.message;
+  const error = id && !submittedHash
+    ? 'This verification link is incomplete or damaged. Scan the QR code on the certificate again.'
+    : verification.error?.message;
   const details = result?.certificate;
-
-  function handleSubmit(event) {
-    event.preventDefault();
-
-    const hash = input.trim();
-
-    if(!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
-      setInputError('Enter 0x followed by 64 hexadecimal characters.');
-      return;
-    }
-
-    setInputError('');
-    setInput(hash);
-
-    if (hash === submittedHash) {
-      verification.refetch();
-    } else {
-      setSubmittedHash(hash);
-    }
-  }
-
-  function reset() {
-    setSubmittedHash('');
-    setInput('');
-    setInputError('');
-  }
 
   const chainRecord = result && (
     <section className="sheet p-6 sm:p-7">
@@ -148,52 +123,21 @@ export default function VerifierPortalPage({
       <main className="mx-auto max-w-6xl px-6 py-10 sm:py-14">
         {phase === 'idle' && (
           <section className="fade-view mx-auto max-w-2xl text-center">
-            <div className="mb-6 flex justify-center"><Seal status="Verified" size={92} animate /></div>
-            <div className="eyebrow mb-3">University of Batangas · CICT</div>
+            <div className="mb-6 flex justify-center"><Seal status="Verified" size={92} /></div>
             <h1 className="font-serif text-5xl font-medium leading-[1.02] sm:text-6xl">
               Verify a certificate
             </h1>
             <p className="mt-5 text-lg text-ink-soft">
-              Enter the certificate hash, or scan the QR code on the certificate with your phone camera.
+              Scan the QR code on the certificate with your phone camera.
               The result comes straight from the blockchain record on Polygon Amoy.
             </p>
 
-            <form
-              onSubmit={handleSubmit}
-              className="sheet tick-corners mt-10 p-6 text-left sm:p-8"
-            >
-              <label htmlFor="certificate-hash" className="eyebrow mb-2 block">
-                Certificate hash
-              </label>
-              <input
-                id="certificate-hash"
-                value={input}
-                onChange={event => setInput(event.target.value)}
-                className="field font-mono !py-4"
-                placeholder="0x..."
-                required
-                aria-invalid={Boolean(inputError)}
-                aria-describedby={error ? 'verification-error' : undefined}
-              />
-
-              {error && (
-                <p
-                  id="verification-error"
-                  role="alert"
-                  className="mt-3 text-sm text-revoked"
-                >
-                  {error}
-                </p>
-              )}
-
-              <Btn
-                type="submit"
-                iconRight="ph-arrow-right"
-                className="mt-4 w-full !py-3.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-forest"
-              >
-                Verify certificate
-              </Btn>
-            </form>
+            {error && (
+              <div role="alert" className="mx-auto mt-8 max-w-md rounded-xl border border-revoked/20 bg-revoked-bg p-4 text-sm text-revoked">
+                <p>{error}</p>
+                {submittedHash && <Btn variant="line" size="sm" className="mt-3" onClick={() => verification.refetch()}>Try again</Btn>}
+              </div>
+            )}
           </section>
         )}
 
@@ -226,11 +170,10 @@ export default function VerifierPortalPage({
               <Rosette color="#fff" className="pointer-events-none absolute" style={{ width: 420, right: -120, top: -170, opacity: 0.13 }} />
               <div className="relative"><Seal status={banner.seal} size={118} animate /></div>
               <div className="relative min-w-[240px] flex-1">
-                <div className="eyebrow !text-white/70">Verification result</div>
-                <h1 className="rise mt-2 font-serif text-4xl font-medium leading-tight md:text-5xl">
+                <h1 className="font-serif text-4xl font-medium leading-tight md:text-5xl">
                   {result.status === 'Valid' && !details ? 'Blockchain record is valid' : banner.title}
                 </h1>
-                <p className="rise mt-3 text-lg text-white/80" style={{ '--d': '.1s' }}>
+                <p className="mt-3 text-lg text-white/80">
                   {banner.description}
                 </p>
               </div>
@@ -238,7 +181,7 @@ export default function VerifierPortalPage({
 
             {details ? (
               <div className="mt-8 grid items-start gap-8 lg:grid-cols-12">
-                <div className="rise space-y-4 lg:col-span-7">
+                <div className="space-y-4 lg:col-span-7">
                   <Certificate
                     tilt={false}
                     verificationUrl={certificateVerificationUrl(submittedHash, window.location.origin)}
@@ -257,7 +200,7 @@ export default function VerifierPortalPage({
                   </p>
                 </div>
                 <div className="space-y-6 lg:col-span-5">
-                  <section className="sheet rise p-6 sm:p-7" style={{ '--d': '.06s' }}>
+                  <section className="sheet p-6 sm:p-7">
                     <h2 className="eyebrow mb-1">Inspection record</h2>
                     <div className="hair py-4">
                       <div className="eyebrow mb-1">Certificate holder</div>
@@ -273,7 +216,7 @@ export default function VerifierPortalPage({
                       <Row label="Seminar date">{details.seminarDate}</Row>
                     </dl>
                   </section>
-                  <div className="rise" style={{ '--d': '.12s' }}>{chainRecord}</div>
+                  <div>{chainRecord}</div>
                 </div>
               </div>
             ) : (
@@ -285,16 +228,6 @@ export default function VerifierPortalPage({
                 </div>}
               </div>
             )}
-
-            <div className="mx-auto mt-8 max-w-2xl">
-              <Btn
-                variant="line"
-                className="w-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-forest"
-                onClick={reset}
-              >
-                Verify another certificate
-              </Btn>
-            </div>
           </section>
         )}
       </main>

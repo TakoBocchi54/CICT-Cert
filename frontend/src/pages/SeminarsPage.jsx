@@ -107,13 +107,12 @@ export default function SeminarsPage() {
     <div className="pb-16">
       <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div>
-          <div className="eyebrow mb-3 rise">Seminars</div>
-          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Seminars</h1>
-          <p className="text-ink-soft text-md mt-4 max-w-xl rise" style={{ '--d': '.1s' }}>
+          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Seminars</h1>
+          <p className="text-ink-soft text-md mt-4 max-w-xl">
             Create a seminar and share its registration link.
           </p>
         </div>
-        <Btn icon="ph-plus" className="rise" style={{ '--d': '.15s' }} onClick={() => setCreating(true)}>New seminar</Btn>
+        <Btn icon="ph-plus" onClick={() => setCreating(true)}>New seminar</Btn>
       </div>
 
       <div className={seminars.data?.length ? '' : 'sheet'}>

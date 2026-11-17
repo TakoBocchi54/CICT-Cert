@@ -68,8 +68,7 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
   return (
     <div className="pb-16 md:pb-24">
       <div className="mb-10">
-        <div className="eyebrow mb-3 rise">Registry</div>
-        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>Issued certificates</h1>
+        <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Issued certificates</h1>
       </div>
 
       <section className="sheet overflow-hidden" aria-labelledby="registry-title">

@@ -107,9 +107,8 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
   return (
     <div className="max-w-5xl mx-auto pb-16 md:pb-24">
       <header className="mb-9">
-        <div className="eyebrow mb-3 rise">Faculty / My account</div>
-        <h1 className="font-serif text-4xl md:text-5xl font-medium rise" style={{ '--d': '.05s' }}>Account settings</h1>
-        <p className="text-ink-soft mt-4 rise" style={{ '--d': '.08s' }}>Manage your personal details and keep your account secure.</p>
+        <h1 className="font-serif text-4xl md:text-5xl font-medium">Account settings</h1>
+        <p className="text-ink-soft mt-4">Manage your personal details and keep your account secure.</p>
       </header>
       {loadError ? (
         <section role="alert" className="flex flex-wrap items-center gap-4 rounded-2xl bg-revoked-bg p-5 text-sm text-revoked">
@@ -125,7 +124,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
         </div>
       ) : (
         <div className="grid lg:grid-cols-3 gap-6 items-start">
-          <aside className="sheet p-6 rise" style={{ '--d': '.1s' }} aria-labelledby="account-name">
+          <aside className="sheet p-6" aria-labelledby="account-name">
             <div className="w-14 h-14 rounded-2xl bg-forest text-white flex items-center justify-center text-xl font-semibold mb-5 shadow" aria-hidden="true">
               {account.firstName.slice(0, 1)}{account.lastName.slice(0, 1)}
             </div>
@@ -157,7 +156,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
             </p>
           </aside>
           <div className="lg:col-span-2 space-y-6">
-            <form onSubmit={saveProfile} className="sheet p-6 md:p-8 rise" style={{ '--d': '.14s' }} aria-labelledby="profile-title">
+            <form onSubmit={saveProfile} className="sheet p-6 md:p-8" aria-labelledby="profile-title">
               <CardHeading icon="ph-user" title={<span id="profile-title">Personal details</span>} help="Use the name you want displayed in your faculty workspace." />
               <fieldset disabled={savingProfile} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -176,7 +175,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
                 </div>
               </fieldset>
             </form>
-            <form onSubmit={savePassword} className="sheet p-6 md:p-8 rise" style={{ '--d': '.18s' }} aria-labelledby="password-title">
+            <form onSubmit={savePassword} className="sheet p-6 md:p-8" aria-labelledby="password-title">
               <CardHeading icon="ph-lock-key" title={<span id="password-title">Change password</span>} helpId="password-help"
                 help="Use at least 12 characters. Choose a password you do not use elsewhere." />
               <fieldset disabled={savingPassword} className="space-y-5">

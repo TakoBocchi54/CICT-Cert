@@ -54,10 +54,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-6 mb-10">
         <div>
-          <div className="eyebrow mb-3 rise">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          </div>
-          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02] rise" style={{ '--d': '.05s' }}>
+          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">
             Seminar workspace
           </h1>
         </div>
@@ -81,7 +78,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
           </div>
         ) : !latest ? (
           /* No seminars yet: point to where one is created. */
-          <section className="lg:col-span-12 sheet flex flex-col items-center p-10 text-center rise">
+          <section className="lg:col-span-12 sheet flex flex-col items-center p-10 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-paper-2 text-2xl text-forest" aria-hidden="true"><i className="ph-bold ph-calendar-plus"></i></span>
             <h2 className="mt-4 font-serif text-3xl font-medium">No seminars yet</h2>
             <p className="mt-2 max-w-md text-sm text-ink-soft">Create a seminar to get a registration link for students. Its progress shows up here.</p>
@@ -89,7 +86,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
           </section>
         ) : <>
           {/* Hero: what needs attention next */}
-          <section className="lg:col-span-7 sheet-dark p-7 rise" aria-labelledby="dashboard-hero-title">
+          <section className="lg:col-span-7 sheet-dark p-7" aria-labelledby="dashboard-hero-title">
             <Rosette color="#fff" className="absolute" style={{ width: 380, right: -120, top: -150, opacity: .1 }} />
             <div className="relative">
               <div className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full" style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)' }}>
@@ -102,7 +99,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
               <div className="flex flex-wrap items-end justify-between gap-6 mt-5">
                 <div>
                   <div className="font-serif font-medium leading-none tabular-nums text-[96px] sm:text-[136px]" style={{ letterSpacing: '-.04em' }}>{hero.count}</div>
-                  <div className="eyebrow !text-[#7fd6a6] mt-2">{hero.label}</div>
+                  <div className="mt-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[#7fd6a6]">{hero.label}</div>
                 </div>
                 <button type="button" onClick={() => onIssueClick(latest.seminarID)}
                   className="bg-white text-forest font-semibold text-sm px-5 py-2.5 rounded-xl hover:-translate-y-0.5 transition-transform inline-flex items-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
@@ -113,7 +110,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
           </section>
 
           {/* Issuance progress: issued out of attended, newest seminars first. Each row opens that seminar's Issue wizard. */}
-          <section className="lg:col-span-5 sheet p-7 rise" style={{ '--d': '.08s' }} aria-labelledby="dashboard-progress-title">
+          <section className="lg:col-span-5 sheet p-7" aria-labelledby="dashboard-progress-title">
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <h2 id="dashboard-progress-title" className="font-serif text-2xl font-medium">Issuance progress</h2>
               {onNavigateSeminars && seminars.data.length > 3 && <button type="button" onClick={onNavigateSeminars} className={linkButton}>All seminars</button>}
@@ -148,7 +145,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
         </>}
 
         {/* Recently issued */}
-        <section className="lg:col-span-7 sheet p-7 rise" style={{ '--d': '.12s' }} aria-labelledby="dashboard-recent-title">
+        <section className="lg:col-span-7 sheet p-7" aria-labelledby="dashboard-recent-title">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 id="dashboard-recent-title" className="font-serif text-2xl font-medium">Recently issued</h2>
             {onNavigateRegistry && totalIssued > 0 && <button type="button" onClick={onNavigateRegistry} className={linkButton}>Open registry</button>}
@@ -197,12 +194,12 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
         </section>
 
         {/* Revoked: compact */}
-        <section className="lg:col-span-5 sheet p-7 rise flex flex-col" style={{ '--d': '.16s', background: 'linear-gradient(180deg,#fff,#fdf4f2)' }} aria-labelledby="dashboard-revoked-title">
+        <section className="lg:col-span-5 sheet p-7 flex flex-col" aria-labelledby="dashboard-revoked-title">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 id="dashboard-revoked-title" className="eyebrow">Revoked</h2>
+              <h2 id="dashboard-revoked-title" className="font-serif text-2xl font-medium">Revoked</h2>
               {summary.isPending ? <Bar className="mt-2 h-14 w-16" />
-                : <div className="font-serif text-6xl leading-none mt-2 text-revoked tabular-nums">{totalRevoked}</div>}
+                : <div className="font-serif text-5xl leading-none mt-2 text-revoked tabular-nums">{totalRevoked}</div>}
             </div>
             <Seal status="Revoked" size={64} />
           </div>
@@ -233,10 +230,10 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
 function IssuerWallet({ query }) {
   const { data, error, isPending } = query;
   const low = data?.low;
-  const look = 'rise inline-flex items-center gap-2.5 rounded-xl border px-7 py-3.5 text-base font-semibold '
+  const look = 'inline-flex items-center gap-2.5 rounded-xl border px-7 py-3.5 text-base font-semibold '
     + (low ? 'border-pending/40 bg-pending-bg' : 'border-[var(--line)] bg-white');
   if (isPending || error) return (
-    <div role={error ? 'alert' : 'status'} className={look + (error ? ' text-revoked' : ' text-ink-muted')} style={{ '--d': '.15s' }} title={error?.message}>
+    <div role={error ? 'alert' : 'status'} className={look + (error ? ' text-revoked' : ' text-ink-muted')} title={error?.message}>
       <i className={'ph-bold ' + (error ? 'ph-warning-circle' : 'ph-wallet')} aria-hidden="true"></i>
       {error ? 'Issuer balance unavailable' : 'Loading issuer balance...'}
     </div>
@@ -245,7 +242,7 @@ function IssuerWallet({ query }) {
     <a href={`https://amoy.polygonscan.com/address/${data.address}`} target="_blank" rel="noreferrer"
       title={low ? `Below the ${data.threshold} POL warning level. Top up before issuing more.` : data.address}
       aria-label={`Issuer wallet balance ${data.balance} POL${low ? `, low: below ${data.threshold} POL` : ''}. View on PolygonScan (opens in a new tab)`}
-      className={look + ' text-ink transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest'} style={{ '--d': '.15s' }}>
+      className={look + ' text-ink transition-colors hover:border-ink-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest'}>
       <i className={'ph-bold ' + (low ? 'ph-warning text-pending' : 'ph-wallet text-forest')} aria-hidden="true"></i>
       <span className="font-normal text-ink-muted">Issuer wallet</span>
       <span className="tabular-nums">{Number(data.balance).toLocaleString('en-US', { maximumFractionDigits: 4 })} POL</span>

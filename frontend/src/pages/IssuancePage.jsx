@@ -81,9 +81,9 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
     <div className="pb-16">
       <header className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div className="min-w-0">
-          <div className="eyebrow mb-3 rise break-words">Issue{selected ? ' · ' + selected.seminarTitle : ''}</div>
-          <h1 ref={heading} tabIndex={-1} className="scroll-mt-28 font-serif text-4xl sm:text-5xl md:text-6xl font-medium leading-[1.02] outline-none rise" style={{ '--d': '.05s' }}>
+          <h1 ref={heading} tabIndex={-1} className="scroll-mt-28 font-serif text-4xl sm:text-5xl md:text-6xl font-medium leading-[1.02] outline-none">
             <span className="text-ink">Step {current + 1}<span className="sr-only"> of {STEPS.length}</span>:</span> <span className="text-ink-muted">{TITLES[current]}</span></h1>
+          {selected && <p className="mt-3 break-words text-lg text-ink-soft">{selected.seminarTitle}</p>}
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {selected && <Btn variant="line" icon="ph-pencil-simple" onClick={() => setEditing(true)} aria-label={`Edit seminar ${selected.seminarTitle}`}>Edit</Btn>}
@@ -106,7 +106,7 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
       ) : (
         <div className="grid gap-8 lg:grid-cols-[250px_1fr]">
           {/* Stage rail: later steps open once a seminar is picked; step 1 switches seminars. */}
-          <nav aria-label="Seminar steps" className="sheet p-2 lg:sticky lg:top-28 lg:self-start lg:p-3 rise" style={{ '--d': '.08s' }}>
+          <nav aria-label="Seminar steps" className="sheet p-2 lg:sticky lg:top-28 lg:self-start lg:p-3">
             <ol className="grid grid-cols-4 gap-1 lg:grid-cols-1">
               {STEPS.map((name, index) => {
                 const done = selected && index !== current && stepDone(selected, index);
@@ -136,7 +136,7 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
             </ol>
           </nav>
 
-          <div className={'sheet min-w-0 p-6 md:p-10 flex flex-col rise ' + (current === 0 ? 'w-full max-w-2xl justify-self-center self-start' : 'md:min-h-[520px]')} style={{ '--d': '.12s' }}>
+          <div className={'sheet min-w-0 p-6 md:p-10 flex flex-col ' + (current === 0 ? 'w-full max-w-2xl justify-self-center self-start' : 'md:min-h-[520px]')}>
             {/* Every panel stays mounted (hidden when inactive) so switching steps keeps files and running batches. */}
             <section hidden={current !== 0} className="flex-1 fade-view">
               <SeminarStep seminars={seminars.data} selected={selected} onChange={id => changeSeminar(id, 0)} onNavigateSeminars={onNavigateSeminars} />
