@@ -77,7 +77,7 @@ test("students register through the seminar link", { skip: !local && "Requires l
   }
   const login = async email => (await fetch(`${base}/auth/student/session`, { method: "POST",
     headers: { Authorization: "Bearer " + await idToken(email) } })).status;
-  const profile = { fullName: "  Maria  Santos ", program: "BSIT" };
+  const profile = { fullName: "  Maria  Santos ", program: "BSIT", contactNumber: "+63 (917) 123-4567" };
 
   await t.test("shows seminar details; wrong links are not found", async () => {
     const page = await call("GET", open.registrationToken);
@@ -97,7 +97,9 @@ test("students register through the seminar link", { skip: !local && "Requires l
       headers: { "Content-Type": "application/json", Authorization: "Bearer not.a.jwt" }, body: JSON.stringify(profile) });
     assert.equal(forged.status, 401);
     assert.equal((await call("GET", open.registrationToken, "faculty@example.test")).status, 403);
-    for (const body of [{}, { fullName: " ", program: "BSIT" }, { fullName: "A\nB", program: "BSIT" }, { fullName: "A", program: "x".repeat(256) }]) {
+    for (const body of [{}, { ...profile, fullName: " " }, { ...profile, fullName: "A\nB" }, { ...profile, program: "x".repeat(256) },
+      { ...profile, contactNumber: undefined }, { ...profile, contactNumber: "12345" }, { ...profile, contactNumber: "0917-abc-4567" },
+      { ...profile, contactNumber: "1".repeat(16) }]) {
       assert.equal((await call("POST", open.registrationToken, "new@gmail.com", body)).status, 400);
     }
     for (const token of [closed.registrationToken, expired.registrationToken]) {
@@ -118,19 +120,19 @@ test("students register through the seminar link", { skip: !local && "Requires l
       ["new@gmail.com", "Maria Santos", null, false]);
     assert.match(result.cookie, /^cict_session=.+HttpOnly/);
     const page = (await call("GET", open.registrationToken, "new@gmail.com")).data;
-    assert.deepEqual([page.registered, page.account], [true, { fullName: "Maria Santos", program: "BSIT" }]);
+    assert.deepEqual([page.registered, page.account], [true, { fullName: "Maria Santos", program: "BSIT", contactNumber: "+639171234567" }]);
     assert.equal(await login("new@gmail.com"), 200);
     const again = await call("POST", open.registrationToken, "new@gmail.com", profile);
     assert.deepEqual([again.status, again.data.alreadyRegistered], [200, true]);
   });
 
-  await t.test("an existing student can correct their name and program while registering", async () => {
-    assert.deepEqual((await call("GET", open.registrationToken, "existing@gmail.com")).data.account, { fullName: "Old Name", program: "BSCS" });
-    const result = await call("POST", open.registrationToken, "existing@gmail.com", { fullName: "New Name", program: "BSIT" });
+  await t.test("an existing student can correct their name, program and contact number while registering", async () => {
+    assert.deepEqual((await call("GET", open.registrationToken, "existing@gmail.com")).data.account, { fullName: "Old Name", program: "BSCS", contactNumber: null });
+    const result = await call("POST", open.registrationToken, "existing@gmail.com", { fullName: "New Name", program: "BSIT", contactNumber: "0917 123 4567" });
     assert.equal(result.status, 201);
-    const { rows } = await db.query(`SELECT s."fullName", s."program", count(*)::int AS registrations FROM student s
-      JOIN users u USING ("userID") JOIN seminar_registration r USING ("studentID") WHERE u."email" = 'existing@gmail.com' GROUP BY 1, 2`);
-    assert.deepEqual(rows, [{ fullName: "New Name", program: "BSIT", registrations: 1 }]);
+    const { rows } = await db.query(`SELECT s."fullName", s."program", s."contactNumber", count(*)::int AS registrations FROM student s
+      JOIN users u USING ("userID") JOIN seminar_registration r USING ("studentID") WHERE u."email" = 'existing@gmail.com' GROUP BY 1, 2, 3`);
+    assert.deepEqual(rows, [{ fullName: "New Name", program: "BSIT", contactNumber: "09171234567", registrations: 1 }]);
     assert.equal((await db.query(`SELECT 1 FROM seminar_registration WHERE "attended"`)).rowCount, 0);
   });
 });

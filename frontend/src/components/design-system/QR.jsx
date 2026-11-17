@@ -1,6 +1,6 @@
 import qrcode from 'qrcode-generator';
 
-export const QR = ({ value, size = 64, color = '#16231d' }) => {
+export const QR = ({ value, size = 64, color = '#16231d', label = 'QR code linking to certificate verification' }) => {
   const code = qrcode(0, 'M');
   code.addData(value);
   code.make();
@@ -12,7 +12,7 @@ export const QR = ({ value, size = 64, color = '#16231d' }) => {
     }
   }
   return <svg viewBox={`0 0 ${count + 8} ${count + 8}`} width={size} height={size} role="img"
-    aria-label="QR code linking to certificate verification" shapeRendering="crispEdges" className="block">
+    aria-label={label} shapeRendering="crispEdges" className="block">
     <rect width={count + 8} height={count + 8} fill="#fff" />
     <path d={path} fill={color} />
   </svg>;

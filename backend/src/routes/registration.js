@@ -39,12 +39,12 @@ router.get("/register/:token", async (req, res) => {
   const { seminarID, ...details } = seminar;
   if (!email) return res.json(details);
   const { rows: [account] } = await pool.query(
-    `SELECT u."role", s."fullName", s."program",
+    `SELECT u."role", s."fullName", s."program", s."contactNumber",
             EXISTS (SELECT 1 FROM seminar_registration r WHERE r."seminarID" = $2 AND r."studentID" = s."studentID") AS "registered"
      FROM users u LEFT JOIN student s ON s."userID" = u."userID" WHERE u."email" = $1`, [email, seminarID]);
   if (account && account.role !== "STUDENT") return res.status(403).json({ error: FACULTY });
   res.json({ ...details, email, registered: !!account?.registered,
-    account: account?.fullName ? { fullName: account.fullName, program: account.program } : null });
+    account: account?.fullName ? { fullName: account.fullName, program: account.program, contactNumber: account.contactNumber } : null });
 });
 
 const registerLimiter = rateLimit({
@@ -57,8 +57,10 @@ const registerLimiter = rateLimit({
 });
 
 const profileText = value => typeof value === "string" ? value.trim().replace(/ +/g, " ") : "";
+// Spaces, dashes, dots and parentheses are dropped, so "0917 123 4567" and "+63 (917) 123-4567" are stored as digits.
+const contactNumber = value => typeof value === "string" ? value.replace(/[\s().-]/g, "") : "";
 
-// Creates the student account when missing (or saves the edited name and program), registers them for the seminar
+// Creates the student account when missing (or saves the edited profile), registers them for the seminar
 // and starts their session. Registering twice is not an error.
 router.post("/register/:token", registerLimiter, async (req, res) => {
   let email;
@@ -67,6 +69,10 @@ router.post("/register/:token", registerLimiter, async (req, res) => {
   const fullName = profileText(req.body?.fullName), program = profileText(req.body?.program);
   if ([fullName, program].some(value => !value || value.length > 255 || /[\u0000-\u001f\u007f]/.test(value))) {
     return res.status(400).json({ error: "Enter your full name and program, each 1–255 characters without line breaks." });
+  }
+  const contact = contactNumber(req.body?.contactNumber);
+  if (!/^\+?\d{7,15}$/.test(contact)) {
+    return res.status(400).json({ error: "Enter a contact number of 7–15 digits, for example 09171234567 or +639171234567." });
   }
   const client = await pool.connect();
   try {
@@ -80,9 +86,10 @@ router.post("/register/:token", registerLimiter, async (req, res) => {
     const { rows: [user] } = await client.query(`SELECT "userID", "role" FROM users WHERE "email" = $1`, [email]);
     if (user.role !== "STUDENT") return await refuse(403, FACULTY);
     const { rows: [student] } = await client.query(
-      `INSERT INTO student ("userID", "fullName", "program") VALUES ($1, $2, $3)
-       ON CONFLICT ("userID") DO UPDATE SET "fullName" = EXCLUDED."fullName", "program" = EXCLUDED."program"
-       RETURNING "studentID", "fullName"`, [user.userID, fullName, program]);
+      `INSERT INTO student ("userID", "fullName", "program", "contactNumber") VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("userID") DO UPDATE SET "fullName" = EXCLUDED."fullName", "program" = EXCLUDED."program",
+         "contactNumber" = EXCLUDED."contactNumber"
+       RETURNING "studentID", "fullName"`, [user.userID, fullName, program, contact]);
     const registered = await client.query(
       `INSERT INTO seminar_registration ("seminarID", "studentID") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [seminar.seminarID, student.studentID]);

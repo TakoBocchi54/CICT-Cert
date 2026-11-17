@@ -57,10 +57,6 @@ export default function RegisterPage({ onLogin }) {
         disabled={connecting || (isConnected && !tokenError)}
         onClick={() => { setTokenError(null); connectTo(WALLET_CONNECTORS.AUTH, { authConnection: AUTH_CONNECTION.GOOGLE }).catch(() => {}); }}>
         {connecting || isConnected ? 'Connecting...' : 'Sign in with Google'}</Btn>
-      <p className="mt-3 text-center text-xs text-ink-muted">
-        By continuing, you agree to{' '}
-        <button type="button" onClick={() => setShowConsent(true)} className="cursor-pointer font-semibold text-forest underline hover:text-ink">CICT-Cert certificate consent</button>.
-      </p>
     </div>
   );
   else if (seminar.registered) body = (
@@ -71,7 +67,7 @@ export default function RegisterPage({ onLogin }) {
     </div>
   );
   else if (!seminar.open) body = <Problem message="Registration for this seminar is closed." onRetry={switchAccount} />;
-  else body = <ProfileForm key={seminar.email} seminar={seminar} register={register} onSwitch={switchAccount} />;
+  else body = <ProfileForm key={seminar.email} seminar={seminar} register={register} onSwitch={switchAccount} onShowConsent={() => setShowConsent(true)} />;
 
   return (
     <main className="min-h-screen bg-paper px-4 py-10">
@@ -108,11 +104,12 @@ const SignedInAs = ({ email, onSwitch }) => (
 );
 
 // New accounts fill in their details; existing ones see theirs prefilled and may correct them.
-function ProfileForm({ seminar, register, onSwitch }) {
+function ProfileForm({ seminar, register, onSwitch, onShowConsent }) {
   const [fullName, setFullName] = useState(seminar.account?.fullName ?? '');
   const [program, setProgram] = useState(seminar.account?.program ?? '');
+  const [contactNumber, setContactNumber] = useState(seminar.account?.contactNumber ?? '');
   return (
-    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!register.isPending) register.mutate({ fullName, program }); }}>
+    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!register.isPending) register.mutate({ fullName, program, contactNumber }); }}>
       <p className="text-sm text-ink-soft">{seminar.account ? 'Check your details, then confirm your registration.'
         : 'Enter your details to create your CICT-Cert account and register.'}</p>
       <fieldset disabled={register.isPending} className="space-y-4">
@@ -127,9 +124,20 @@ function ProfileForm({ seminar, register, onSwitch }) {
           <input id="register-program" className="field" required maxLength={255} autoComplete="off" placeholder="e.g. BSIT" value={program}
             onChange={event => { register.reset(); setProgram(event.target.value); }} />
         </div>
+        <div>
+          <label htmlFor="register-contact" className="eyebrow mb-2 block">Contact number</label>
+          <input id="register-contact" type="tel" inputMode="tel" className="field" required maxLength={24} autoComplete="tel"
+            placeholder="e.g. 0917 123 4567" value={contactNumber}
+            onChange={event => { register.reset(); setContactNumber(event.target.value); }} aria-describedby="register-contact-hint" />
+          <p id="register-contact-hint" className="mt-1.5 text-xs text-ink-muted">Only CICT sees it. It never appears on your certificate.</p>
+        </div>
         {register.error && <p role="alert" className="text-sm text-revoked">{register.error.message}</p>}
         <Btn type="submit" className="w-full !py-3.5" icon="ph-check">
           {register.isPending ? 'Registering...' : seminar.account ? 'Confirm registration' : 'Register'}</Btn>
+        <p className="text-center text-xs text-ink-muted">
+          By registering, you agree to{' '}
+          <button type="button" onClick={onShowConsent} className="cursor-pointer font-semibold text-forest underline hover:text-ink">CICT-Cert certificate consent and privacy notice</button>.
+        </p>
       </fieldset>
       <SignedInAs email={seminar.email} onSwitch={onSwitch} />
     </form>

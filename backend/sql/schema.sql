@@ -32,6 +32,8 @@ CREATE TABLE student (
     "userID" INTEGER NOT NULL UNIQUE,
     "fullName" VARCHAR(255) NOT NULL,
     "program" VARCHAR(255) NOT NULL,
+    -- Collected on the registration page; NULL for accounts faculty created or that registered before migration 011.
+    "contactNumber" VARCHAR(16),
     CONSTRAINT fk_student_user
         FOREIGN KEY ("userID")
         REFERENCES users ("userID")

@@ -1,13 +1,31 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Btn } from './design-system';
+import { Btn, QR } from './design-system';
 import { api } from '../lib/api';
 import { registrationUrl, formatDeadline } from '../lib/registrationLink';
+import { saveBlob } from '../lib/saveBlob';
+
+// Draws the on-screen QR SVG onto a 1024px canvas so the download prints sharply on posters and slides.
+async function downloadQr(svg, filename) {
+  const image = new Image();
+  image.src = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' }));
+  try {
+    await image.decode();
+    const canvas = Object.assign(document.createElement('canvas'), { width: 1024, height: 1024 });
+    canvas.getContext('2d').drawImage(image, 0, 0, 1024, 1024);
+    saveBlob(await new Promise(resolve => canvas.toBlob(resolve, 'image/png')), filename);
+  } finally { URL.revokeObjectURL(image.src); }
+}
 
 // The shareable registration link, its open/closed state, and closing it early.
 export function RegistrationLink({ seminar }) {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const qr = useRef(null);
+  const download = useMutation({
+    mutationFn: () => downloadQr(qr.current.querySelector('svg'),
+      `registration-qr-${seminar.seminarTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || seminar.seminarID}.png`),
+  });
   const close = useMutation({
     mutationFn: () => api(`/api/faculty/seminars/${seminar.seminarID}/registration/close`, { method: 'POST' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] }),
@@ -37,7 +55,18 @@ export function RegistrationLink({ seminar }) {
         <Btn variant="line" icon={copied ? 'ph-check' : 'ph-copy'} onClick={() => navigator.clipboard?.writeText(url).then(() => setCopied(true), () => {})}>
           {copied ? 'Copied' : 'Copy'}</Btn>
       </div>
-      {close.error && <p role="alert" className="mt-3 text-sm text-revoked">{close.error.message}</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-4">
+        <div ref={qr} className="shrink-0 overflow-hidden rounded-lg border border-[var(--line)]">
+          <QR value={url} size={112} color="#000" label={`QR code for the registration link of ${seminar.seminarTitle}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-ink-soft">Students can scan this to open the registration page. Put it on a slide or a printed poster.</p>
+          <Btn variant="line" size="sm" className="mt-3" icon="ph-download-simple" disabled={download.isPending} onClick={() => download.mutate()}>
+            {download.isPending ? 'Preparing...' : 'Download QR code'}</Btn>
+          {download.error && <p role="alert" className="mt-2 text-sm text-revoked">Could not create the QR image. Please try again.</p>}
+        </div>
+      </div>
+      {close.error &&<p role="alert" className="mt-3 text-sm text-revoked">{close.error.message}</p>}
     </div>
   );
 }
