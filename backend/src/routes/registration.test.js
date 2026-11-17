@@ -77,7 +77,7 @@ test("students register through the seminar link", { skip: !local && "Requires l
   }
   const login = async email => (await fetch(`${base}/auth/student/session`, { method: "POST",
     headers: { Authorization: "Bearer " + await idToken(email) } })).status;
-  const profile = { fullName: "  Maria  Santos ", program: "BSIT", contactNumber: "+63 (917) 123-4567" };
+  const profile = { fullName: "  Maria  Santos ", program: "BSIT", contactNumber: "0917 123 4567" };
 
   await t.test("shows seminar details; wrong links are not found", async () => {
     const page = await call("GET", open.registrationToken);
@@ -98,7 +98,7 @@ test("students register through the seminar link", { skip: !local && "Requires l
     assert.equal(forged.status, 401);
     assert.equal((await call("GET", open.registrationToken, "faculty@example.test")).status, 403);
     for (const body of [{}, { ...profile, fullName: " " }, { ...profile, fullName: "A\nB" }, { ...profile, program: "x".repeat(256) },
-      { ...profile, contactNumber: undefined }, { ...profile, contactNumber: "12345" }, { ...profile, contactNumber: "0917-abc-4567" },
+      { ...profile, contactNumber: undefined }, { ...profile, contactNumber: "12345" }, { ...profile, contactNumber: "+639171234567" }, { ...profile, contactNumber: "0917123456" }, { ...profile, contactNumber: "0917-abc-4567" },
       { ...profile, contactNumber: "1".repeat(16) }]) {
       assert.equal((await call("POST", open.registrationToken, "new@gmail.com", body)).status, 400);
     }
@@ -120,7 +120,7 @@ test("students register through the seminar link", { skip: !local && "Requires l
       ["new@gmail.com", "Maria Santos", null, false]);
     assert.match(result.cookie, /^cict_session=.+HttpOnly/);
     const page = (await call("GET", open.registrationToken, "new@gmail.com")).data;
-    assert.deepEqual([page.registered, page.account], [true, { fullName: "Maria Santos", program: "BSIT", contactNumber: "+639171234567" }]);
+    assert.deepEqual([page.registered, page.account], [true, { fullName: "Maria Santos", program: "BSIT", contactNumber: "09171234567" }]);
     assert.equal(await login("new@gmail.com"), 200);
     const again = await call("POST", open.registrationToken, "new@gmail.com", profile);
     assert.deepEqual([again.status, again.data.alreadyRegistered], [200, true]);

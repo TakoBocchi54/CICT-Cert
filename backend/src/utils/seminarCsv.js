@@ -42,6 +42,10 @@ export function googleEmail(value, where) {
 
 // Validates and de-duplicates student rows ({ full_name, program, google_account }) from a CSV or a JSON request.
 // `label` names a row in errors ("CSV record", "Row").
+// Spaces, dashes, dots and parentheses are dropped, so "0917 123 4567" is stored as 09171234567.
+export const cleanContactNumber = value => typeof value === "string" ? value.replace(/[\s().-]/g, "") : "";
+export const isContactNumber = value => /^\d{11}$/.test(value);
+
 export function readStudentRows(rows, label = "CSV record") {
   const students = new Map();
   for (const [index, row] of rows.entries()) {
@@ -54,6 +58,9 @@ export function readStudentRows(rows, label = "CSV record") {
     if (Object.values(student).some(value => !value || value.length > 255 || /[\u0000-\u001f\u007f]/.test(value))) {
       throw new CsvError(`${where}: name, program, and Google email must each contain 1–255 characters without line breaks or control characters.`);
     }
+    const contact = cleanContactNumber(row?.contact_number);
+    if (!isContactNumber(contact)) throw new CsvError(`${where}: enter an 11-digit contact number, for example 09171234567.`);
+    student.contact_number = contact;
     const previous = students.get(student.google_account);
     if (previous && (previous.full_name !== student.full_name || previous.program !== student.program)) {
       throw new CsvError(`${where}: a repeated email has conflicting names or programs. Correct it before importing.`);
@@ -64,7 +71,7 @@ export function readStudentRows(rows, label = "CSV record") {
 }
 
 export function readRegistrationCsv(csv) {
-  return readStudentRows(readRows(csv, ["full_name", "program", "google_account"]));
+  return readStudentRows(readRows(csv, ["full_name", "program", "google_account", "contact_number"]));
 }
 
 // Optional full_name/program are only prefill hints for registering an unknown attendee; faculty review them first.

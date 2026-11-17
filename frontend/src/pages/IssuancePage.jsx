@@ -29,7 +29,10 @@ function stepDone(seminar, index) {
     attendanceCount > 0 && issuedCount >= attendanceCount,
   ][index];
 }
-const firstOpenStep = seminar => [1, 2, 3].find(index => !stepDone(seminar, index)) ?? 3;
+// Every attendee has a certificate (including ones still waiting on a wallet), so Review is complete.
+const allPrepared = ({ attendanceCount, readyCount, awaitingCount, issuedCount }) =>
+  attendanceCount > 0 && readyCount + awaitingCount + issuedCount >= attendanceCount;
+const firstOpenStep =seminar => [1, 2, 3].find(index => !stepDone(seminar, index)) ?? 3;
 
 function stepHint(seminar, index) {
   if (!seminar) return index === 0 ? 'Pick a seminar' : '';
@@ -165,7 +168,7 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
                   {attendanceResult.prepared && ` ${attendanceResult.prepared.prepared} certificates prepared; ${attendanceResult.prepared.awaitingWallet} attendees still need a wallet.`}
                   {attendanceResult.prepareError && <span className="block text-revoked">Certificates were not prepared: {attendanceResult.prepareError} Use Prepare certificates below.</span>}
                 </div>}
-                <CertificatePreparation mode="review" seminarID={selected.seminarID} />
+                <CertificatePreparation mode="review" seminarID={selected.seminarID} attendanceCount={selected.attendanceCount} />
               </section>
               <section hidden={current !== 3} className="flex flex-1 flex-col fade-view">
                 <CertificatePreparation mode="issue" seminarID={selected.seminarID} onDone={onNavigateRegistry} actionSlot={current === 3 ? actionSlot : null} />
@@ -176,7 +179,8 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
               {current > 0 ? <Btn variant="ghost" icon="ph-arrow-left" onClick={() => goTo(current - 1)}>Back to {STEPS[current - 1]}</Btn> : <span />}
               {/* The attendance step puts its own action here (Continue, or Confirm once a file is reviewed); the issue step its Done. */}
               {(current === 1 || current === 3) && selected ? <span ref={setActionSlot} />
-                : current < STEPS.length - 1 && selected && <Btn iconRight="ph-arrow-right" onClick={() => goTo(current + 1)}>Continue to {STEPS[current + 1]}</Btn>}
+                : current < STEPS.length - 1 && selected && <Btn iconRight="ph-arrow-right" disabled={current === 2 && !allPrepared(selected)}
+                  title={current === 2 && !allPrepared(selected) ? 'Prepare certificates first' : undefined} onClick={() => goTo(current + 1)}>Continue to {STEPS[current + 1]}</Btn>}
             </div>}
           </div>
         </div>

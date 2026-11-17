@@ -129,7 +129,7 @@ function ProfileForm({ seminar, register, onSwitch, onShowConsent }) {
           <input id="register-contact" type="tel" inputMode="tel" className="field" required maxLength={24} autoComplete="tel"
             placeholder="e.g. 0917 123 4567" value={contactNumber}
             onChange={event => { register.reset(); setContactNumber(event.target.value); }} aria-describedby="register-contact-hint" />
-          <p id="register-contact-hint" className="mt-1.5 text-xs text-ink-muted">Only CICT sees it. It never appears on your certificate.</p>
+          <p id="register-contact-hint" className="mt-1.5 text-xs text-ink-muted">11 digits, e.g. 09171234567. Only CICT sees it. It never appears on your certificate.</p>
         </div>
         {register.error && <p role="alert" className="text-sm text-revoked">{register.error.message}</p>}
         <Btn type="submit" className="w-full !py-3.5" icon="ph-check">

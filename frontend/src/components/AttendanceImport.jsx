@@ -142,7 +142,7 @@ const PreviewTable = ({ title, head, children }) => (
 function UnregisteredPrompt({ preview, disabled, onUseAccount, onRegistered }) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState(() => Object.fromEntries(preview.unregistered.map(row =>
-    [row.email, { checked: !row.suggestions.length, fullName: row.fullName, program: row.program }])));
+    [row.email, { checked: !row.suggestions.length, fullName: row.fullName, program: row.program, contactNumber: '' }])));
   const [rightFile, setRightFile] = useState(false);
   const register = useMutation({
     mutationFn: students => api('/api/faculty/students', { method: 'POST', body: { students } }),
@@ -152,7 +152,7 @@ function UnregisteredPrompt({ preview, disabled, onUseAccount, onRegistered }) {
   const total = preview.matched.length + count + preview.facultyEmails.length;
   const suspicious = count >= 10 && count * 2 >= total;
   const selected = preview.unregistered.filter(row => rows[row.email].checked);
-  const incomplete = selected.some(row => !rows[row.email].fullName.trim() || !rows[row.email].program.trim());
+  const incomplete = selected.some(row => !rows[row.email].fullName.trim() || !rows[row.email].program.trim() || !/^\d{11}$/.test(rows[row.email].contactNumber.replace(/[\s().-]/g, '')));
   const busy = disabled || register.isPending;
   const update = (email, patch) => { register.reset(); setRows({ ...rows, [email]: { ...rows[email], ...patch } }); };
 
@@ -181,7 +181,7 @@ function UnregisteredPrompt({ preview, disabled, onUseAccount, onRegistered }) {
               <input type="checkbox" checked={state.checked} disabled={busy} onChange={event => update(row.email, { checked: event.target.checked })} className="w-4 h-4 shrink-0 accent-[var(--forest)]" />
               <span className="font-mono text-sm break-all">{row.email}</span>
             </label>
-            <div className="grid gap-3 sm:grid-cols-[1.5fr_1fr] mt-3">
+            <div className="grid gap-3 sm:grid-cols-[1.5fr_1fr_1fr] mt-3">
               <div>
                 <label htmlFor={'unregistered-name-' + index} className="block text-xs font-medium text-ink-muted mb-1">Full name</label>
                 <input id={'unregistered-name-' + index} className="field" maxLength={255} disabled={busy || !state.checked} value={state.fullName}
@@ -192,6 +192,11 @@ function UnregisteredPrompt({ preview, disabled, onUseAccount, onRegistered }) {
                 <input id={'unregistered-program-' + index} className="field" maxLength={255} disabled={busy || !state.checked} value={state.program}
                   onChange={event => update(row.email, { program: event.target.value })} />
               </div>
+              <div>
+                <label htmlFor={'unregistered-contact-' + index} className="block text-xs font-medium text-ink-muted mb-1">Contact number</label>
+                <input id={'unregistered-contact-' + index} type="tel" className="field" maxLength={30} placeholder="09171234567" disabled={busy || !state.checked} value={state.contactNumber}
+                  onChange={event => update(row.email, { contactNumber: event.target.value })} />
+              </div>
             </div>
             {row.suggestions.map(suggestion => <div key={suggestion.studentID} className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-paper-2 p-3 text-sm">
               <span className="break-words">Did you mean <strong>{suggestion.fullName}</strong> (<span className="break-all">{suggestion.email}</span>)?</span>
@@ -201,10 +206,10 @@ function UnregisteredPrompt({ preview, disabled, onUseAccount, onRegistered }) {
         })}</ul>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Btn icon="ph-user-plus" disabled={busy || !selected.length || incomplete || (suspicious && !rightFile)}
-            onClick={() => register.mutate(selected.map(row => ({ fullName: rows[row.email].fullName, program: rows[row.email].program, googleAccount: row.email })))}>
+            onClick={() => register.mutate(selected.map(row => ({ fullName: rows[row.email].fullName, program: rows[row.email].program, contactNumber: rows[row.email].contactNumber, googleAccount: row.email })))}>
             {register.isPending ? 'Registering...' : `Register ${selected.length} selected`}
           </Btn>
-          {incomplete && <span className="text-xs text-revoked">Fill in the name and program for every ticked row.</span>}
+          {incomplete && <span className="text-xs text-revoked">Fill in the name, program and an 11-digit contact number for every ticked row.</span>}
         </div>
         {register.error && <p role="alert" className="mt-3 text-sm text-revoked">{register.error.message}</p>}
       </section>}

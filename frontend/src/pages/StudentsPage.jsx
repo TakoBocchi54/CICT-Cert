@@ -6,7 +6,7 @@ import { useFacultyMe } from '../hooks/useFacultyMe';
 import CsvDropZone from '../components/CsvDropZone';
 import { Btn } from '../components/design-system';
 
-const EMPTY = { fullName: '', program: '', googleAccount: '' };
+const EMPTY = { fullName: '', program: '', googleAccount: '', contactNumber: '' };
 
 // Student accounts: registering a Google account is what lets a student sign in. Attendance is matched to these accounts.
 export default function StudentsPage() {
@@ -61,7 +61,7 @@ export default function StudentsPage() {
       <div className="grid gap-6 lg:grid-cols-12">
         <section className="sheet p-8 lg:col-span-7" aria-labelledby="bulk-title">
           <h2 id="bulk-title" className="font-serif text-2xl mb-2">Register from a CSV</h2>
-          <p className="mb-5 text-sm text-ink-muted">Required headers: <code>full_name,program,google_account</code>. Extra columns are ignored. Existing accounts are kept unchanged.</p>
+          <p className="mb-5 text-sm text-ink-muted">Required headers: <code>full_name,program,google_account,contact_number</code>. Extra columns are ignored. Existing accounts are kept unchanged.</p>
           <CsvDropZone id="students-csv" title="Drop the student CSV" draft={draft} disabled={upload.isPending}
             onDraft={next => { setFileError(''); upload.reset(); setDraft(next); }} onError={setFileError} />
           {fileError && <p role="alert" className="mt-3 text-sm text-revoked">{fileError}</p>}
@@ -81,7 +81,9 @@ export default function StudentsPage() {
             <label htmlFor="student-program" className="eyebrow block mb-2">Program</label>
             <input id="student-program" className="field mb-4" required maxLength={255} autoComplete="off" placeholder="e.g. BSIT" {...field('program')} />
             <label htmlFor="student-email" className="eyebrow block mb-2">Google account</label>
-            <input id="student-email" type="email" className="field mb-5" required maxLength={255} autoComplete="off" placeholder="name@gmail.com" {...field('googleAccount')} />
+            <input id="student-email" type="email" className="field mb-4" required maxLength={255} autoComplete="off" placeholder="name@gmail.com" {...field('googleAccount')} />
+            <label htmlFor="student-contact" className="eyebrow block mb-2">Contact number</label>
+            <input id="student-contact" type="tel" className="field mb-5" required maxLength={30} autoComplete="off" placeholder="11 digits, e.g. 0917 123 4567" {...field('contactNumber')} />
             <Btn type="submit" disabled={add.isPending} icon="ph-user-plus">{add.isPending ? 'Registering...' : 'Register student'}</Btn>
           </form>
           {add.error && <p role="alert" className="mt-4 text-sm text-revoked">{add.error.message}</p>}
@@ -110,13 +112,14 @@ export default function StudentsPage() {
               <caption className="sr-only">Registered students</caption>
               <thead className="bg-paper-2"><tr>
                 <th scope="col" className="p-3">Name</th><th scope="col" className="p-3">Program</th>
-                <th scope="col" className="p-3">Google account</th><th scope="col" className="p-3">Wallet</th>
+                <th scope="col" className="p-3">Google account</th><th scope="col" className="p-3">Contact</th><th scope="col" className="p-3">Wallet</th>
                 <th scope="col" className="p-3 text-center">Seminars</th><th scope="col" className="p-3 text-center">Certificates</th>
                 {canRemove && <th scope="col" className="p-3"><span className="sr-only">Actions</span></th>}
               </tr></thead>
               <tbody>{students.data.map(student => <tr key={student.studentID} className="border-t border-[var(--line)]">
                 <td className="p-3">{student.fullName}</td><td className="p-3">{student.program}</td>
                 <td className="break-all p-3">{student.email}</td>
+                <td className="p-3">{student.contactNumber || <span className="text-ink-muted">—</span>}</td>
                 <td className="p-3">{student.walletConnected ? 'Connected' : <span className="text-ink-muted">Not signed in yet</span>}</td>
                 <td className="p-3 text-center tabular-nums">{student.seminarsAttended}</td>
                 <td className="p-3 text-center tabular-nums">{student.certificates}</td>

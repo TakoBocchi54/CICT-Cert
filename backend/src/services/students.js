@@ -23,9 +23,9 @@ export async function registerStudents(client, students) {
     throw new StudentError(409, "An email belongs to a faculty account or an incomplete student profile. No students were registered; contact CICT to resolve the account.");
   }
   const profiles = await client.query(
-    `INSERT INTO student ("userID", "fullName", "program")
-     SELECT u."userID", csv.full_name, csv.program
-     FROM jsonb_to_recordset($1::jsonb) AS csv(full_name text, program text, google_account text)
+    `INSERT INTO student ("userID", "fullName", "program", "contactNumber")
+     SELECT u."userID", csv.full_name, csv.program, csv.contact_number
+     FROM jsonb_to_recordset($1::jsonb) AS csv(full_name text, program text, google_account text, contact_number text)
      JOIN users u ON u."email" = csv.google_account
      ORDER BY u."userID" ON CONFLICT ("userID") DO NOTHING`, [data],
   );

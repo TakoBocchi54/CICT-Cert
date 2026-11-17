@@ -10,7 +10,7 @@ const count = (n, noun = 'certificate') => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 // mode 'review': prepare certificates and check the list (names can be corrected). mode 'issue': mint every ready certificate in batches.
 // onDone: where the Done button goes once everything issuable is issued (issue mode). Issue/Done render into actionSlot, the wizard footer.
-export default function CertificatePreparation({ seminarID, disabled, mode, onDone, actionSlot }) {
+export default function CertificatePreparation({ seminarID, attendanceCount, disabled, mode, onDone, actionSlot }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [reviewingIssuance, setReviewingIssuance] = useState(false);
@@ -24,6 +24,16 @@ export default function CertificatePreparation({ seminarID, disabled, mode, onDo
     queryFn: () => api(base),
     retry: false, refetchOnWindowFocus: false,
   });
+  // Review step, before Prepare: list the attendees who will get a certificate (same table, numbers still blank).
+  const attendees = useQuery({
+    queryKey: ['seminar-attendees', seminarID, attendanceCount], // the count changes as people are checked in
+    queryFn: async () => (await api(`/api/faculty/seminars/${seminarID}/registrations`)).filter(row => row.attended).map(row => ({
+      certificateID: 'attendee-' + row.studentID, certificateNo: '', recipientName: row.fullName, email: row.email,
+      attended: true, walletConnected: row.walletConnected, preview: true })),
+    enabled: mode === 'review' && certificates.data?.length === 0,
+    retry: false, refetchOnWindowFocus: false,
+  });
+  const rows = certificates.data?.length ? certificates.data : attendees.data || [];
   const refreshList = () => queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] });
   const refresh = () => Promise.all([refreshList(), queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] })]);
   const prepare = useMutation({ mutationFn: () => api(base + '/prepare', { method: 'POST' }), onSuccess: refresh });
@@ -72,7 +82,7 @@ export default function CertificatePreparation({ seminarID, disabled, mode, onDo
         <h2 className="font-serif text-2xl font-medium">Names on certificates</h2>
         <p className="mt-1 text-sm text-ink-muted">Printed exactly as shown. Correct any name before issuing.</p>
       </div>
-      {certificates.data?.length > 0 && <p className="text-sm text-ink-soft tabular-nums">{count(certificates.data.length)}</p>}
+      {rows.length > 0 && <p className="text-sm text-ink-soft tabular-nums">{rows[0].preview ? `${rows.length} attended` : count(rows.length)}</p>}
     </div> : <div className="flex flex-wrap items-baseline justify-between gap-2">
       <div>
         <h2 className="font-serif text-2xl font-medium">Certificates to issue</h2>
@@ -80,13 +90,13 @@ export default function CertificatePreparation({ seminarID, disabled, mode, onDo
       </div>
       <p className="text-sm text-ink-soft tabular-nums">{ready.length} ready</p>
     </div>}
-    {certificates.isPending ? <p role="status" className="mt-4">Loading certificates...</p> : certificates.error ? <p role="alert" className="mt-4 text-sm text-revoked">{certificates.error.message}</p> : !certificates.data.length ? <p className="mt-4 rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">
+    {certificates.isPending ? <p role="status" className="mt-4">Loading certificates...</p> : certificates.error ? <p role="alert" className="mt-4 text-sm text-revoked">{certificates.error.message}</p> : !rows.length ? <p className="mt-4 rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">
       No certificates prepared yet.{mode === 'review' ? ' Prepare them for everyone marked attended.' : ' Prepare them in the Review step.'}</p> : <div className="mt-4 max-h-[480px] overflow-auto rounded-xl border border-[var(--line)]">
       <table className="w-full min-w-[500px] text-left text-sm">
         <caption className="sr-only">Prepared certificates: the name printed on each and its progress</caption>
         <thead className="sticky top-0 z-10 bg-paper-2"><tr>{['No.', 'Name on certificate', 'Progress'].map(head =>
           <th key={head} scope="col" className="eyebrow px-4 py-3 font-semibold">{head}</th>)}</tr></thead>
-        <tbody className="divide-y divide-[var(--line)]">{certificates.data.map(certificate => <tr key={certificate.certificateID} className="align-top hover:bg-paper">
+        <tbody className="divide-y divide-[var(--line)]">{rows.map(certificate => <tr key={certificate.certificateID} className="align-top hover:bg-paper">
           <td className="px-4 py-3 font-mono">{certificate.certificateNo}</td>
           <td className="px-4 py-3">
             {editing?.id === certificate.certificateID ? <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); if (!busy) rename.mutate(editing); }}>
@@ -105,7 +115,7 @@ export default function CertificatePreparation({ seminarID, disabled, mode, onDo
             </>}
           </td>
           <td className="px-4 py-3">
-            {certificateProgress(certificate)}
+            {certificate.preview ? `Not prepared${certificate.walletConnected ? '' : '; awaiting wallet setup'}` : certificateProgress(certificate)}
             {certificate.tokenID && <span className="mt-1 block text-xs">Token #{certificate.tokenID}</span>}
             {certificate.transactionHash && <a className="mt-1 block text-xs text-forest underline" href={`https://amoy.polygonscan.com/tx/${certificate.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>}
             {certificate.status === 'ISSUED' && <a className="mt-1 block text-xs text-forest underline" href={`/verify?id=${certificate.certificateHash}`}>Verify certificate</a>}

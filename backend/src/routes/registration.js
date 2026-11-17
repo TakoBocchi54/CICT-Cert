@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { pool } from "../db/pool.js";
 import { verifyIdToken } from "../services/web3auth.js";
 import { startSession } from "../utils/session.js";
+import { cleanContactNumber, isContactNumber } from "../utils/seminarCsv.js";
 
 // Public seminar registration through the link faculty share. This is the only way a student account is created
 // besides faculty; the login page still refuses Google accounts that never registered.
@@ -57,8 +58,6 @@ const registerLimiter = rateLimit({
 });
 
 const profileText = value => typeof value === "string" ? value.trim().replace(/ +/g, " ") : "";
-// Spaces, dashes, dots and parentheses are dropped, so "0917 123 4567" and "+63 (917) 123-4567" are stored as digits.
-const contactNumber = value => typeof value === "string" ? value.replace(/[\s().-]/g, "") : "";
 
 // Creates the student account when missing (or saves the edited profile), registers them for the seminar
 // and starts their session. Registering twice is not an error.
@@ -70,9 +69,9 @@ router.post("/register/:token", registerLimiter, async (req, res) => {
   if ([fullName, program].some(value => !value || value.length > 255 || /[\u0000-\u001f\u007f]/.test(value))) {
     return res.status(400).json({ error: "Enter your full name and program, each 1–255 characters without line breaks." });
   }
-  const contact = contactNumber(req.body?.contactNumber);
-  if (!/^\+?\d{7,15}$/.test(contact)) {
-    return res.status(400).json({ error: "Enter a contact number of 7–15 digits, for example 09171234567 or +639171234567." });
+  const contact = cleanContactNumber(req.body?.contactNumber);
+  if (!isContactNumber(contact)) {
+    return res.status(400).json({ error: "Enter an 11-digit contact number, for example 09171234567." });
   }
   const client = await pool.connect();
   try {

@@ -14,7 +14,7 @@ router.get("/faculty/students", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 255) : "";
   // shortcut: first 200 matches only, no paging; add paging when a search routinely returns more.
   const { rows } = await pool.query(
-    `SELECT s."studentID", s."fullName", s."program", u."email", u."createdAt",
+    `SELECT s."studentID", s."fullName", s."program", s."contactNumber", u."email", u."createdAt",
             (w."studentWalletID" IS NOT NULL) AS "walletConnected",
             (SELECT count(*)::int FROM seminar_registration r WHERE r."studentID" = s."studentID" AND r."attended") AS "seminarsAttended",
             (SELECT count(*)::int FROM certificate c WHERE c."studentID" = s."studentID") AS "certificates"
@@ -49,7 +49,7 @@ router.post("/faculty/students", async (req, res) => {
   if (!Array.isArray(rows) || !rows.length || rows.length > MAX_ROWS) {
     return res.status(400).json({ error: `Send between 1 and ${MAX_ROWS} students.` });
   }
-  await register(res, readStudentRows(rows.map(row => ({ full_name: row?.fullName, program: row?.program, google_account: row?.googleAccount })), "Row"));
+  await register(res, readStudentRows(rows.map(row => ({ full_name: row?.fullName, program: row?.program, google_account: row?.googleAccount, contact_number: row?.contactNumber })), "Row"));
 });
 
 // Undo for a mistaken registration. Only accounts that never linked a wallet (so never finished signing in) and have

@@ -52,7 +52,7 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
     return { status: response.status, data: response.status === 204 ? null : await response.json() };
   }
   const count = async table => Number((await db.query(`SELECT count(*) FROM ${table}`)).rows[0].count);
-  const csv = 'full_name,section,program,google_account\nCSV Name,CS 3-1,BSIT,EXISTING@gmail.com\n"Reyes, Ana",IT 2-1,BSIT,ana@gmail.com\n"Reyes, Ana",IT 2-2,BSIT,ANA@GMAIL.COM';
+  const csv = 'full_name,section,program,google_account,contact_number\nCSV Name,CS 3-1,BSIT,EXISTING@gmail.com,09171234567\n"Reyes, Ana",IT 2-1,BSIT,ana@gmail.com,09171234567\n"Reyes, Ana",IT 2-2,BSIT,ANA@GMAIL.COM,09171234567';
 
   await t.test("rejects anonymous, student and deleted faculty sessions", async () => {
     for (const session of ["", await cookie("STUDENT", "3", "1"), await cookie("FACULTY", "999", "999")]) {
@@ -64,12 +64,14 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
 
   await t.test("invalid CSV or rows create no accounts", async () => {
     const before = await count("users");
-    for (const bad of ["", "full_name,program\nJuan,BSCS", "full_name,program,google_account\nJuan,BSCS,bad-email"]) {
+    for (const bad of ["", "full_name,program\nJuan,BSCS", "full_name,program,google_account\nJuan,BSCS,juan@gmail.com",
+      "full_name,program,google_account,contact_number\nJuan,BSCS,bad-email,09171234567", "full_name,program,google_account,contact_number\nJuan,BSCS,juan@gmail.com,0917"]) {
       assert.equal((await request("POST", "/import", { csv: bad })).status, 400);
     }
-    for (const students of [undefined, [], Array(501).fill({ fullName: "A", program: "B", googleAccount: "a@gmail.com" }),
-      [{ fullName: " ", program: "BSCS", googleAccount: "x@gmail.com" }], [{ fullName: "A", program: "B", googleAccount: 42 }],
-      [{ fullName: "A", program: "B", googleAccount: "same@gmail.com" }, { fullName: "Other", program: "B", googleAccount: "same@gmail.com" }]]) {
+    for (const students of [undefined, [], Array(501).fill({ fullName: "A", program: "B", googleAccount: "a@gmail.com", contactNumber: "09171234567" }),
+      [{ fullName: " ", program: "BSCS", googleAccount: "x@gmail.com", contactNumber: "09171234567" }],
+      [{ fullName: "A", program: "B", googleAccount: "x@gmail.com" }], [{ fullName: "A", program: "B", googleAccount: "x@gmail.com", contactNumber: "0917123456" }], [{ fullName: "A", program: "B", googleAccount: 42, contactNumber: "09171234567" }],
+      [{ fullName: "A", program: "B", googleAccount: "same@gmail.com", contactNumber: "09171234567" }, { fullName: "Other", program: "B", googleAccount: "same@gmail.com", contactNumber: "09171234567" }]]) {
       assert.equal((await request("POST", "", { students })).status, 400, JSON.stringify(students)?.slice(0, 80));
     }
     assert.equal(await count("users"), before);
@@ -88,15 +90,16 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
   });
 
   await t.test("single and multiple JSON rows use the same rules", async () => {
-    const one = await request("POST", "", { students: [{ fullName: " Juan Dela Cruz ", program: "BSCS", googleAccount: " Juan.DelaCruz@Gmail.com " }] });
+    const one = await request("POST", "", { students: [{ fullName: " Juan Dela Cruz ", program: "BSCS", googleAccount: " Juan.DelaCruz@Gmail.com ", contactNumber: "0917 123 4567" }] });
     assert.equal(one.status, 201); assert.equal(one.data.created, 1);
     assert.equal((await db.query(`SELECT "fullName" FROM student s JOIN users u USING ("userID") WHERE email = 'juan.delacruz@gmail.com'`)).rows[0].fullName, "Juan Dela Cruz");
+    assert.equal((await db.query(`SELECT "contactNumber" FROM student s JOIN users u USING ("userID") WHERE email = 'juan.delacruz@gmail.com'`)).rows[0].contactNumber, "09171234567");
   });
 
   await t.test("a faculty email rejects the whole batch", async () => {
     const before = await count("users");
-    const result = await request("POST", "", { students: [{ fullName: "New", program: "BSIT", googleAccount: "new@gmail.com" },
-      { fullName: "Faculty", program: "BSIT", googleAccount: "faculty@example.test" }] });
+    const result = await request("POST", "", { students: [{ fullName: "New", program: "BSIT", googleAccount: "new@gmail.com", contactNumber: "09171234567" },
+      { fullName: "Faculty", program: "BSIT", googleAccount: "faculty@example.test", contactNumber: "09171234567" }] });
     assert.equal(result.status, 409);
     assert.equal(await count("users"), before);
   });
@@ -104,14 +107,14 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
   await t.test("an incomplete student account rejects the whole batch", async () => {
     await db.query(`INSERT INTO users (email, role) VALUES ('incomplete@gmail.com', 'STUDENT')`);
     const before = await count("users");
-    const result = await request("POST", "/import", { csv: "full_name,program,google_account\nNew,BSCS,another@gmail.com\nIncomplete,BSCS,incomplete@gmail.com" });
+    const result = await request("POST", "/import", { csv: "full_name,program,google_account,contact_number\nNew,BSCS,another@gmail.com,09171234567\nIncomplete,BSCS,incomplete@gmail.com,09171234567" });
     assert.equal(result.status, 409);
     assert.equal(await count("users"), before);
     await db.query(`DELETE FROM users WHERE email = 'incomplete@gmail.com'`);
   });
 
   await t.test("concurrent imports do not duplicate accounts", async () => {
-    const csv = "full_name,program,google_account\nOne,BSCS,one@gmail.com\nTwo,BSCS,two@gmail.com";
+    const csv = "full_name,program,google_account,contact_number\nOne,BSCS,one@gmail.com,09171234567\nTwo,BSCS,two@gmail.com,09171234567";
     const results = await Promise.all([request("POST", "/import", { csv }), request("POST", "/import", { csv })]);
     assert.deepEqual(results.map(result => result.status), [201, 201]);
     assert.deepEqual(results.map(result => result.data.created).sort(), [0, 2]);
@@ -122,7 +125,7 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
     const before = await count("users");
     await db.query(`ALTER TABLE student ADD CONSTRAINT test_import_failure CHECK ("fullName" <> 'Reject import')`);
     try {
-      const result = await request("POST", "/import", { csv: "full_name,program,google_account\nReject import,BSCS,reject@gmail.com" });
+      const result = await request("POST", "/import", { csv: "full_name,program,google_account,contact_number\nReject import,BSCS,reject@gmail.com,09171234567" });
       assert.equal(result.status, 500);
       assert.doesNotMatch(result.data.error, /test_import_failure|INSERT|constraint/);
       assert.equal(await count("users"), before);
@@ -130,7 +133,7 @@ test("student account endpoints with PostgreSQL", { skip: !local && "Requires lo
   });
 
   await t.test("imports more than 100 students without a cap", async () => {
-    const csv = "full_name,program,google_account\n" + Array.from({ length: 101 }, (_, index) => `Student ${index},BSCS,bulk${index}@gmail.com`).join("\n");
+    const csv = "full_name,program,google_account,contact_number\n" + Array.from({ length: 101 }, (_, index) => `Student ${index},BSCS,bulk${index}@gmail.com,09171234567`).join("\n");
     const result = await request("POST", "/import", { csv });
     assert.equal(result.status, 201);
     assert.equal(result.data.created, 101);

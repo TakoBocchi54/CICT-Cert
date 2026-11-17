@@ -42,7 +42,7 @@ full_name,section,program,google_account
 Juan Dela Cruz,CS 3-1,BS Computer Science,juan.delacruz@gmail.com
 ```
 
-Only `full_name`, `program`, and `google_account` are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM. JSON rows (`POST /api/faculty/students`, 1–500 rows) get the same per-row checks (`readStudentRows` in `utils/seminarCsv.js`).
+Only `full_name`, `program`, `google_account`, and `contact_number` (exactly 11 digits once spaces, dashes, dots and parentheses are removed) are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM. JSON rows (`POST /api/faculty/students`, 1–500 rows) get the same per-row checks (`readStudentRows` in `utils/seminarCsv.js`).
 
 Emails are trimmed and lowercased; Gmail plus tags and dots are preserved, and Google Workspace email domains are accepted. Identical repeated emails are counted once; conflicting names/programs for the same email within one request reject it. Existing student names, programs and wallets are never changed, and re-registering an existing account is a no-op.
 
@@ -55,8 +55,8 @@ Faculty-only endpoints (session cookie of an active faculty account required):
 | Method | Endpoint | Body |
 | --- | --- | --- |
 | GET | `/api/faculty/students?q=` | — (search by name or email; first 200 matches) |
-| POST | `/api/faculty/students/import` | `{ "csv": "full_name,program,google_account\n..." }` |
-| POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "..." }] }` |
+| POST | `/api/faculty/students/import` | `{ "csv": "full_name,program,google_account,contact_number\n..." }` |
+| POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "...", "contactNumber": "..." }] }` (`contactNumber` required: exactly 11 digits once spaces, dashes, dots and parentheses are removed) |
 | DELETE | `/api/faculty/students/:studentID` | — (`canIssue` only) |
 | GET | `/api/faculty/seminars` | — |
 | POST | `/api/faculty/seminars` | `{ "seminarTitle": "Web Security", "seminarDate": "2026-11-08", "templateID": "3", "venue": "AVR", "registrationClosesAt": "2026-11-07T09:00:00.000Z" }` (`venue` required, 1–255 characters; `templateID` and `registrationClosesAt` optional, `null` = built-in design / registration closed) |
@@ -81,11 +81,11 @@ Public endpoints (`routes/registration.js`):
 | Method | Endpoint | Body |
 | --- | --- | --- |
 | GET | `/api/register/:token` | — returns title, date, venue, `registrationClosesAt`, `open`. With an optional `Authorization: Bearer <Web3Auth ID token>` also returns `email`, `account` (`{ fullName, program, contactNumber }` or null) and `registered`. 404 for an unknown token, 401 for a bad ID token, 403 for a faculty account |
-| POST | `/api/register/:token` | `{ "fullName": "...", "program": "...", "contactNumber": "0917 123 4567" }` with the Bearer ID token (required). The contact number is stored without spaces, dashes, dots or parentheses and must then be 7–15 digits with an optional leading `+`. Rate-limited |
+| POST | `/api/register/:token` | `{ "fullName": "...", "program": "...", "contactNumber": "0917 123 4567" }` with the Bearer ID token (required). The contact number is stored without spaces, dashes, dots or parentheses and must then be exactly 11 digits. Rate-limited |
 
 POST runs in one transaction holding a `FOR SHARE` lock on the seminar row (registrations run in parallel but wait for closing, editing or preparing). It returns 409 when registration is closed, creates the student account when missing, otherwise **saves the edited name, program and contact number** on the existing account, then adds an unattended `seminar_registration` row and starts the student session. Registering again returns 200 with `alreadyRegistered: true`; a new registration returns 201. Already-prepared certificates keep their name snapshot; faculty review names before issuing.
 
-This is the only way, besides faculty, that a student account is created. The login page still answers 403 for a Google account that never registered. Any Google account with the link can register, so faculty remove registrants who aren't CICT students; only students faculty mark as attended receive certificates. No student number or section is collected. The contact number (`student."contactNumber"`, migration 011) is collected only here; it stays NULL for accounts faculty created until that student registers through a link. Apply `sql/migrations/011_student_contact_number.sql` to existing databases (the general migration script applies it too).
+This is the only way, besides faculty, that a student account is created. The login page still answers 403 for a Google account that never registered. Any Google account with the link can register, so faculty remove registrants who aren't CICT students; only students faculty mark as attended receive certificates. No student number or section is collected. The contact number (`student."contactNumber"`, migration 011) is collected on the link page and on the Students tab's single-student form (required, 11 digits, on every faculty path including the bulk CSV import). An existing account is never updated by faculty registration, only by the student through a link. Apply `sql/migrations/011_student_contact_number.sql` to existing databases (the general migration script applies it too).
 
 ## Final attendance
 
