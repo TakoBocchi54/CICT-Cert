@@ -362,7 +362,7 @@ router.get("/faculty/seminars/:seminarID/certificates", async (req, res) => {
 router.post("/faculty/seminars/:seminarID/certificates/prepare", requireCanIssue, async (req, res) => {
   let context;
   try { context = await certificateIssuer(); }
-  catch { return res.status(503).json({ error: "Cannot read the Amoy contract issuer. Check blockchain configuration and try again." }); }
+  catch (err) { console.error("certificateIssuer failed:", err); return res.status(503).json({ error: "Cannot read the Amoy contract issuer. Check blockchain configuration and try again." }); }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

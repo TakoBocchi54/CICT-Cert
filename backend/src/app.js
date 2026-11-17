@@ -18,6 +18,9 @@ import registrationRoutes from "./routes/registration.js";
 import notificationRoutes from "./routes/notifications.js";
 
 const app = express();
+// Render and Vercel each sit in front of this app; without this every client shares the proxy's IP in the rate limiters.
+// shortcut: trusts a fixed 2 hops (Vercel rewrite -> Render); adjust if the proxy chain changes.
+app.set("trust proxy", 2);
 
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: "2mb" }));

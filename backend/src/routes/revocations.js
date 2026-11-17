@@ -32,7 +32,8 @@ router.get("/faculty/certificates/issuer-wallet", async (_req, res) => {
   try {
     const { address, balance, threshold, low } = await issuerBalance();
     res.json({ address, balance, threshold, low });
-  } catch {
+  } catch (err) {
+    console.error("issuerBalance failed:", err);
     res.status(503).json({ error: "Could not read the issuer wallet balance. Check the backend's Amoy RPC and contract settings." });
   }
 });
