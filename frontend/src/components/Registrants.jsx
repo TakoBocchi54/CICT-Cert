@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Btn, QR } from './design-system';
 import { api } from '../lib/api';
 import { registrationUrl, formatDeadline } from '../lib/registrationLink';
@@ -66,105 +66,151 @@ export function RegistrationLink({ seminar }) {
           {download.error && <p role="alert" className="mt-2 text-sm text-revoked">Could not create the QR image. Please try again.</p>}
         </div>
       </div>
-      {close.error &&<p role="alert" className="mt-3 text-sm text-revoked">{close.error.message}</p>}
+      {close.error && <p role="alert" className="mt-3 text-sm text-revoked">{close.error.message}</p>}
     </div>
   );
 }
 
-// Everyone who registered through the link. Faculty tick who attended and remove registrants who aren't CICT students.
+const MIN_SEARCH = 2;
+const SEARCH_LIMIT = 20; // the backend's limit for ?q= searches
+const NOTICE_LOOK = { verified: 'bg-verified-bg text-verified', pending: 'bg-pending-bg text-pending', revoked: 'bg-revoked-bg text-revoked' };
+
+// The attendance desk. Every search asks the database for this seminar's registrants and every check-in is saved
+// right away, so several laptops can check people in at once without working from a stale list.
 // action: an extra control shown beside the search box (the Issue page's CSV upload button).
-export default function Registrants({ seminarID, action }) {
+export default function Registrants({ seminar, action }) {
+  const { seminarID } = seminar;
   const queryClient = useQueryClient();
-  const [removing, setRemoving] = useState(null);
+  const input = useRef(null);
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [removing, setRemoving] = useState(null);
+  const [notice, setNotice] = useState(null); // { tone: 'verified' | 'pending' | 'revoked', text }
   const base = `/api/faculty/seminars/${seminarID}/registrations`;
-  const registrants = useQuery({
-    queryKey: ['seminar-registrations', seminarID],
-    queryFn: ({ signal }) => api(base, { signal }),
+
+  // Search once typing pauses instead of on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim().replace(/\s+/g, ' ')), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const results = useQuery({
+    queryKey: ['registration-search', seminarID, query],
+    queryFn: ({ signal }) => api(`${base}?q=${encodeURIComponent(query)}`, { signal }),
+    enabled: query.length >= MIN_SEARCH,
+    placeholderData: keepPreviousData,
+    // Results on screen follow check-ins made on other laptops.
+    refetchInterval: 5000,
     retry: false,
   });
-  const refresh = () => Promise.all([['seminar-registrations', seminarID], ['faculty-seminars'], ['seminar-certificates', seminarID]]
-    .map(queryKey => queryClient.invalidateQueries({ queryKey })));
-  const mark = useMutation({
-    mutationFn: ({ studentID, attended }) => api(`${base}/${studentID}`, { method: 'PATCH', body: { attended } }),
+  const refresh = () => Promise.all([['registration-search', seminarID], ['seminar-registrations', seminarID], ['faculty-seminars'],
+    ['seminar-certificates', seminarID]].map(queryKey => queryClient.invalidateQueries({ queryKey })));
+  const failed = (error, row) => setNotice(error.status === 409 && error.message.includes('already checked in')
+    ? { tone: 'pending', text: `${row.fullName} is already checked in.` }
+    : { tone: 'revoked', text: error.message });
+
+  const checkIn = useMutation({
+    mutationFn: row => api(`${base}/${row.studentID}/check-in`, { method: 'POST' }),
+    onMutate: () => setNotice(null),
+    onSuccess: (_data, row) => {
+      setNotice({ tone: 'verified', text: `${row.fullName} is checked in.` });
+      // Ready for the next student in line.
+      setSearch('');
+      setQuery('');
+      input.current?.focus();
+    },
+    onError: failed,
+    onSettled: refresh,
+  });
+  const undo = useMutation({
+    mutationFn: row => api(`${base}/${row.studentID}`, { method: 'PATCH', body: { attended: false } }),
+    onMutate: () => setNotice(null),
+    onSuccess: (_data, row) => setNotice({ tone: 'pending', text: `Check-in undone for ${row.fullName}.` }),
+    onError: failed,
     onSettled: refresh,
   });
   const remove = useMutation({
-    mutationFn: studentID => api(`${base}/${studentID}`, { method: 'DELETE' }),
-    onSuccess: () => setRemoving(null),
+    mutationFn: row => api(`${base}/${row.studentID}`, { method: 'DELETE' }),
+    onMutate: () => setNotice(null),
+    onSuccess: (_data, row) => { setRemoving(null); setNotice({ tone: 'pending', text: `${row.fullName} was removed from this seminar.` }); },
+    onError: failed,
     onSettled: refresh,
   });
-  const busy = mark.isPending || remove.isPending;
+  const busy = checkIn.isPending || undo.isPending || remove.isPending;
+  const rows = results.data ?? [];
+  const searching = query.length >= MIN_SEARCH;
 
-  if (registrants.isPending) return <p role="status" className="mt-6 text-sm text-ink-soft">Loading registered students...</p>;
-  if (registrants.error) return (
-    <div role="alert" className="mt-6 space-y-3 text-sm text-revoked">
-      <p>{registrants.error.message}</p>
-      <div className="flex flex-wrap gap-3">
-        <Btn variant="line" size="sm" onClick={() => registrants.refetch()}>Try again</Btn>
-        {action}
-      </div>
-    </div>
-  );
-  const rows = registrants.data;
-  const attended = rows.filter(row => row.attended).length;
-  const query = search.trim().toLowerCase();
-  const shown = query ? rows.filter(row => row.fullName.toLowerCase().includes(query) || row.email.toLowerCase().includes(query)) : rows;
   return (
     <div className="mt-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-serif text-2xl font-medium">Registered students</h2>
-        <p className="text-sm text-ink-soft tabular-nums">{rows.length} registered · {attended} attended</p>
+        <h2 className="font-serif text-2xl font-medium">Check in attendees</h2>
+        <p className="text-sm text-ink-soft tabular-nums">{seminar.registrationCount} registered · {seminar.attendanceCount} checked in</p>
       </div>
       <p className="mb-4 max-w-2xl text-sm text-ink-muted">
-        Tick everyone who attended; only they receive a certificate. Remove anyone who isn't a CICT student.
+        Search for each student as they arrive and check them in. Check-ins are saved immediately, so several laptops can work at once.
+        Only checked-in students receive a certificate.
       </p>
-      {(rows.length > 0 || action) && <div className="mb-3 flex flex-wrap items-center gap-3">
-        {rows.length > 0 && <div className="relative min-w-0 flex-1 basis-60 sm:max-w-md">
-          <label htmlFor={`registrant-search-${seminarID}`} className="sr-only">Search registered students by name or email</label>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1 basis-60 sm:max-w-md">
+          <label htmlFor={`registrant-search-${seminarID}`} className="sr-only">Search this seminar's registered students by name or email</label>
           <i className="ph-bold ph-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted" aria-hidden="true"></i>
-          <input id={`registrant-search-${seminarID}`} type="search" className="field !pl-11" autoComplete="off" placeholder="Search by name or email"
-            value={search} onChange={event => setSearch(event.target.value)} />
-        </div>}
-        {action && <div className="ml-auto">{action}</div>}
-      </div>}
-      {(mark.error || remove.error) && <p role="alert" className="mb-3 text-sm text-revoked">{(mark.error || remove.error).message}</p>}
-      {!rows.length ? <p className="rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">No one has registered yet.</p> : (
-        <div className="max-h-[480px] overflow-auto rounded-xl border border-[var(--line)]">
-          <table className="w-full min-w-[620px] text-left text-sm">
-            <caption className="sr-only">Registered students and their attendance</caption>
-            <thead className="sticky top-0 z-10 bg-paper-2">
-              <tr>{['Attended', 'Name', 'Program', 'Wallet', ''].map(head =>
-                <th key={head} scope="col" className="eyebrow px-4 py-3 font-semibold">{head || <span className="sr-only">Actions</span>}</th>)}</tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {!shown.length && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No registered student matches "{search.trim()}".</td></tr>}
-              {shown.map(row => (
-                <tr key={row.studentID} className="hover:bg-paper">
-                  <td className="px-4 py-3">
-                    {/* An issued or in-flight certificate keeps the student marked as attended. */}
-                    <input type="checkbox" className="h-5 w-5 cursor-pointer accent-[var(--forest)] disabled:cursor-not-allowed"
-                      aria-label={`${row.fullName} attended`} checked={row.attended}
-                      disabled={busy || (row.attended && row.attendanceLocked)}
-                      onChange={event => { remove.reset(); mark.mutate({ studentID: row.studentID, attended: event.target.checked }); }} />
-                  </td>
-                  <td className="px-4 py-3"><span className="font-medium">{row.fullName}</span>
-                    <span className="block break-all text-xs text-ink-soft">{row.email}</span></td>
-                  <td className="px-4 py-3 text-ink-soft">{row.program}</td>
-                  <td className="px-4 py-3 text-ink-soft">{row.walletConnected ? 'Connected' : 'Not linked yet'}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {row.hasCertificate ? null : removing === row.studentID ? <>
-                      <Btn variant="danger" size="sm" disabled={busy} onClick={() => remove.mutate(row.studentID)}>
-                        {remove.isPending ? 'Removing...' : 'Remove'}</Btn>
-                      <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setRemoving(null)}>Cancel</Btn>
-                    </> : <Btn variant="ghost" size="sm" disabled={busy} aria-label={`Remove ${row.fullName} from this seminar`}
-                      onClick={() => { mark.reset(); remove.reset(); setRemoving(row.studentID); }}>Remove</Btn>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <input ref={input} id={`registrant-search-${seminarID}`} type="search" className="field !pl-11" autoComplete="off"
+            placeholder="Search by name or email" value={search} maxLength={100}
+            onChange={event => { setSearch(event.target.value); setRemoving(null); }} />
         </div>
+        {action && <div className="ml-auto">{action}</div>}
+      </div>
+      {notice && <p role={notice.tone === 'revoked' ? 'alert' : 'status'} className={'mb-3 rounded-xl p-3 text-sm ' + NOTICE_LOOK[notice.tone]}>{notice.text}</p>}
+
+      {!searching ? (
+        <p className="rounded-xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-ink-muted">
+          Type at least {MIN_SEARCH} letters of the student's name or email.</p>
+      ) : results.isPending ? (
+        <p role="status" className="p-6 text-center text-sm text-ink-soft">Searching registered students...</p>
+      ) : results.error && !results.data ? (
+        <div role="alert" className="space-y-3 rounded-xl bg-revoked-bg p-4 text-sm text-revoked">
+          <p>{results.error.message}</p>
+          <Btn variant="line" size="sm" onClick={() => results.refetch()}>Try again</Btn>
+        </div>
+      ) : !rows.length ? (
+        <div role="status" className="rounded-xl border border-[var(--line)] bg-paper p-5">
+          <p className="font-medium">No one matching "{query}" is registered for this seminar.</p>
+          <p className="mt-1 text-sm text-ink-soft">Check the spelling, or ask the student to register: they scan this QR code
+            or open the link, sign in with Google, then you search for them again.</p>
+          <div className="mt-4"><RegistrationLink seminar={seminar} /></div>
+        </div>
+      ) : (
+        <>
+          <ul className="divide-y divide-[var(--line)] overflow-hidden rounded-xl border border-[var(--line)] bg-white" aria-label="Matching registered students">
+            {rows.map(row => (
+              <li key={row.studentID} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3.5">
+                <div className="min-w-0 flex-1 basis-56">
+                  <p className="font-medium">{row.fullName}</p>
+                  <p className="break-all text-xs text-ink-soft">{row.email}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{row.program} · {row.walletConnected ? 'Wallet linked' : 'Wallet not linked yet'}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {removing === row.studentID ? <>
+                    <Btn variant="danger" size="sm" disabled={busy} onClick={() => remove.mutate(row)}>{remove.isPending ? 'Removing...' : 'Remove'}</Btn>
+                    <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setRemoving(null)}>Cancel</Btn>
+                  </> : <>
+                    {!row.hasCertificate && <Btn variant="ghost" size="sm" disabled={busy} aria-label={`Remove ${row.fullName} from this seminar`}
+                      onClick={() => setRemoving(row.studentID)}>Remove</Btn>}
+                    {row.attended ? <>
+                      {/* An issued or in-flight certificate keeps the student checked in. */}
+                      {!row.attendanceLocked && <Btn variant="ghost" size="sm" disabled={busy} aria-label={`Undo check-in for ${row.fullName}`}
+                        onClick={() => undo.mutate(row)}>Undo</Btn>}
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-verified-bg px-3 py-1.5 text-sm font-semibold text-verified">
+                        <i className="ph-bold ph-check-circle" aria-hidden="true"></i>Checked in</span>
+                    </> : <Btn size="sm" icon="ph-check" disabled={busy} aria-label={`Check in ${row.fullName}`} onClick={() => checkIn.mutate(row)}>
+                      {checkIn.isPending && checkIn.variables?.studentID === row.studentID ? 'Checking in...' : 'Check in'}</Btn>}
+                  </>}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {rows.length >= SEARCH_LIMIT && <p className="mt-2 text-xs text-ink-muted">Showing the first {SEARCH_LIMIT} matches. Type more of the name to narrow it down.</p>}
+        </>
       )}
     </div>
   );

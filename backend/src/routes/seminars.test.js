@@ -343,4 +343,26 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     assert.equal((await request("DELETE", "/" + attendanceID + "/registrations/1")).status, 409);
     assert.equal((await request("GET", "/" + attendanceID + "/registrations")).data.find(row => row.studentID === 1).attendanceLocked, true);
   });
+  await t.test("attendance desk: search one seminar's registrants and check each in once, even from several laptops", async () => {
+    const id = (await request("POST", "", { seminarTitle: "Desk", seminarDate: "2026-12-02", venue: "AVR" })).data.seminarID;
+    await db.query(`INSERT INTO seminar_registration ("seminarID", "studentID") VALUES ($1, 2), ($1, 4)`, [id]);
+    const search = async q => request("GET", `/${id}/registrations?q=${encodeURIComponent(q)}`);
+    assert.deepEqual((await search(" ana ")).data.map(row => row.studentID), [2]);
+    assert.deepEqual((await search("DELACRUZ")).data.map(row => row.studentID), [4]);
+    // Registered for other seminars only, or not at all: not found here. LIKE wildcards are matched literally.
+    for (const q of ["One", "Existing", "%", "_"]) assert.deepEqual((await search(q)).data, []);
+    for (const q of [" ", "x".repeat(101)]) assert.equal((await search(q)).status, 400);
+
+    const checkIn = (studentID, session) => request("POST", `/${id}/registrations/${studentID}/check-in`, undefined, session);
+    assert.equal((await checkIn(2, "")).status, 401);
+    assert.equal((await checkIn(3)).status, 404);
+    assert.equal((await request("POST", "/999999/registrations/2/check-in")).status, 404);
+    // Three laptops press Check In for the same student at once: exactly one succeeds.
+    const results = await Promise.all([1, 2, 3].map(() => checkIn(2)));
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 409, 409]);
+    assert.deepEqual(results.find(result => result.status === 200).data, { studentID: 2, attended: true });
+    assert.match(results.find(result => result.status === 409).data.error, /already checked in/);
+    assert.deepEqual((await search("ana")).data.map(row => row.attended), [true]);
+    assert.deepEqual((await search("juan")).data.map(row => row.attended), [false]);
+  });
 });

@@ -9,7 +9,7 @@ export async function api(path, { method = "GET", headers = {}, body, signal } =
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status });
   }
   
   return data;

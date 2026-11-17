@@ -56,6 +56,8 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
     queryFn: () => api('/api/faculty/seminars'),
     retry: false,
     refetchOnWindowFocus: false,
+    // During check-in, other laptops change the counts; keep them current.
+    refetchInterval: step === 1 ? 10_000 : false,
   });
   const selected = seminars.data?.find(seminar => seminar.seminarID === selectedId);
   // Open each seminar at its first unfinished step, once; after that the faculty member drives navigation.
@@ -143,7 +145,7 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
             </section>
             {selected && <div key={selected.seminarID} className="flex-1 flex flex-col">
               <section hidden={current !== 1} className="flex-1 fade-view">
-                <Registrants seminarID={selected.seminarID} action={
+                <Registrants seminar={selected} action={
                   // Upload CSV opens the file picker straight away; the panel appears once a file is chosen.
                   csvVisible ? <Btn variant="line" icon="ph-x" onClick={() => setCsvOpen(false)}>Close CSV upload</Btn>
                     : <Btn variant="line" icon="ph-upload-simple" onClick={() => document.getElementById('attendance-file-' + selected.seminarID)?.click()}>Upload CSV</Btn>} />

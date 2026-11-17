@@ -163,9 +163,15 @@ router.delete("/faculty/seminars/:seminarID", requireCanIssue, async (req, res) 
   });
 });
 
+// The seminar's registrants. With ?q=, only registrants whose name or email contains it (at most SEARCH_LIMIT), so
+// attendance desks always search the database instead of a list loaded earlier.
+const SEARCH_LIMIT = 20;
 router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {
+  const search = typeof req.query.q === "string" ? req.query.q.trim().replace(/\s+/g, " ") : null;
+  if (search !== null && (!search || search.length > 100)) return res.status(400).json({ error: "Enter 1–100 characters to search." });
   const seminar = await pool.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1`, [req.params.seminarID]);
   if (!seminar.rowCount) return res.status(404).json({ error: "Seminar not found." });
+  const pattern = search && "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
   const { rows } = await pool.query(
     `SELECT s."studentID", s."fullName", s."program", u."email", r."attended", r."registeredAt",
             (w."studentWalletID" IS NOT NULL) AS "walletConnected", ${ATTENDANCE_LOCKED} AS "attendanceLocked",
@@ -173,8 +179,9 @@ router.get("/faculty/seminars/:seminarID/registrations", async (req, res) => {
      FROM seminar_registration r JOIN student s ON s."studentID" = r."studentID"
      JOIN users u ON u."userID" = s."userID"
      LEFT JOIN student_wallet w ON w."studentID" = s."studentID"
-     WHERE r."seminarID" = $1 ORDER BY s."fullName", s."studentID"`,
-    [req.params.seminarID],
+     WHERE r."seminarID" = $1 AND ($2::text IS NULL OR s."fullName" ILIKE $2 OR u."email" ILIKE $2)
+     ORDER BY s."fullName", s."studentID" ${search ? `LIMIT ${SEARCH_LIMIT}` : ""}`,
+    [req.params.seminarID, pattern],
   );
   res.json(rows);
 });
@@ -202,6 +209,20 @@ router.patch("/faculty/seminars/:seminarID/registrations/:studentID", async (req
     }
     await client.query(`UPDATE seminar_registration SET "attended" = $3 WHERE "seminarID" = $1 AND "studentID" = $2`, [seminarID, studentID, attended]);
     return { studentID: Number(studentID), attended };
+  });
+});
+
+// Checks a registered student in at the attendance desk. Several laptops may check in at once: the seminar row lock
+// serializes them, and the status is read inside that lock, so a second check-in of the same student gets 409.
+router.post("/faculty/seminars/:seminarID/registrations/:studentID/check-in", async (req, res) => {
+  const { seminarID, studentID } = req.params;
+  await changeLockedSeminar(seminarID, res, async client => {
+    const row = (await client.query(`SELECT r."attended", s."fullName" FROM seminar_registration r
+      JOIN student s ON s."studentID" = r."studentID" WHERE r."seminarID" = $1 AND r."studentID" = $2`, [seminarID, studentID])).rows[0];
+    if (!row) throw new IssuanceError(404, "This student is not registered for this seminar.");
+    if (row.attended) throw new IssuanceError(409, `${row.fullName} is already checked in.`);
+    await client.query(`UPDATE seminar_registration SET "attended" = true WHERE "seminarID" = $1 AND "studentID" = $2`, [seminarID, studentID]);
+    return { studentID: Number(studentID), attended: true };
   });
 });
 
