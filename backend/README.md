@@ -39,11 +39,11 @@ Registering a student's Google account is what lets them sign in. Students are a
 The accepted CSV format is:
 
 ```csv
-full_name,section,program,google_account
-Juan Dela Cruz,CS 3-1,BS Computer Science,juan.delacruz@gmail.com
+first_name,last_name,section,program,google_account,contact_number
+Juan,Dela Cruz,CS 3-1,BS Computer Science,juan.delacruz@gmail.com,09171234567
 ```
 
-Only `full_name`, `program`, `google_account`, and `contact_number` (exactly 11 digits once spaces, dashes, dots and parentheses are removed) are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM. JSON rows (`POST /api/faculty/students`, 1–500 rows) get the same per-row checks (`readStudentRows` in `utils/seminarCsv.js`).
+The name comes from `first_name` and `last_name`, joined as `First Last` (both required in every row), or from a single `full_name` column instead; a CSV with both forms, or only one of the two parts, is rejected. Only the name, `program`, `google_account`, and `contact_number` (exactly 11 digits once spaces, dashes, dots and parentheses are removed) are required and stored. Section and other extra columns are ignored. Headers ignore surrounding spaces and letter case. Imports accept UTF-8 CSVs up to 1 MB, including quoted commas, escaped quotes, and a BOM. JSON rows (`POST /api/faculty/students`, 1–500 rows) get the same per-row checks (`readStudentRows` in `utils/seminarCsv.js`).
 
 Emails are trimmed and lowercased; Gmail plus tags and dots are preserved, and Google Workspace email domains are accepted. Identical repeated emails are counted once; conflicting names/programs for the same email within one request reject it. Existing student names, programs and wallets are never changed, and re-registering an existing account is a no-op.
 
@@ -56,7 +56,7 @@ Faculty-only endpoints (session cookie of an active faculty account required):
 | Method | Endpoint | Body |
 | --- | --- | --- |
 | GET | `/api/faculty/students?q=` | — (search by name or email; first 200 matches) |
-| POST | `/api/faculty/students/import` | `{ "csv": "full_name,program,google_account,contact_number\n..." }` |
+| POST | `/api/faculty/students/import` | `{ "csv": "first_name,last_name,program,google_account,contact_number\n..." }` (or `full_name` instead of the two name columns) |
 | POST | `/api/faculty/students` | `{ "students": [{ "fullName": "...", "program": "...", "googleAccount": "...", "contactNumber": "..." }] }` (`contactNumber` required: exactly 11 digits once spaces, dashes, dots and parentheses are removed) |
 | DELETE | `/api/faculty/students/:studentID` | — (`canIssue` only) |
 | GET | `/api/faculty/seminars` | — |
@@ -90,7 +90,7 @@ This is the only way, besides faculty, that a student account is created. The lo
 
 ## Final attendance
 
-In the seminar's **Attendance** step, choose a CSV, review the matches, then **Confirm attendance**. Only the `google_account` header is required. `full_name` and `program`, when present, are used only to prefill registration of attendees who don't have an account yet. Other columns are ignored:
+In the seminar's **Attendance** step, choose a CSV, review the matches, then **Confirm attendance**. Only the `google_account` header is required. `full_name` (or `first_name` and `last_name`, joined) and `program`, when present, are used only to prefill registration of attendees who don't have an account yet. Other columns are ignored:
 
 ```csv
 full_name,section,program,student_id,google_account

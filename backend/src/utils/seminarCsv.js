@@ -70,19 +70,34 @@ export function readStudentRows(rows, label = "CSV record") {
   return { students: [...students.values()], duplicatesSkipped: rows.length - students.size };
 }
 
-export function readRegistrationCsv(csv) {
-  return readStudentRows(readRows(csv, ["full_name", "program", "google_account", "contact_number"]));
+const NAME_COLUMNS = ["full_name", "first_name", "last_name"];
+
+// The name comes from full_name, or from first_name and last_name joined as "First Last" (one or the other, not both).
+// A row missing either part gets an empty name, which readStudentRows rejects.
+function withFullName(records) {
+  const columns = NAME_COLUMNS.filter(name => name in records[0]);
+  if (columns.length === 1 && columns[0] === "full_name") return records;
+  if (columns.length !== 2 || columns.includes("full_name")) {
+    throw new CsvError("CSV must contain either full_name, or first_name and last_name.");
+  }
+  return records.map(({ first_name: first, last_name: last, ...record }) =>
+    ({ ...record, full_name: first && last ? `${first} ${last}` : "" }));
 }
 
-// Optional full_name/program are only prefill hints for registering an unknown attendee; faculty review them first.
-const hint = value => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 255) : "";
+export function readRegistrationCsv(csv) {
+  return readStudentRows(withFullName(readRows(csv, ["program", "google_account", "contact_number"], NAME_COLUMNS)));
+}
+
+// Optional name/program are only prefill hints for registering an unknown attendee; faculty review them first.
+const hint = value => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().replace(/ +/g, " ").slice(0, 255) : "";
 
 export function readAttendanceCsv(csv) {
-  const records = readRows(csv, ["google_account"], ["full_name", "program"]);
+  const records = readRows(csv, ["google_account"], [...NAME_COLUMNS, "program"]);
   const hints = new Map();
   records.forEach((record, index) => {
     const email = googleEmail(record.google_account, `CSV record ${index + 1}`);
-    if (!hints.has(email)) hints.set(email, { fullName: hint(record.full_name), program: hint(record.program) });
+    const fullName = hint(record.full_name) || hint(`${record.first_name ?? ""} ${record.last_name ?? ""}`);
+    if (!hints.has(email)) hints.set(email, { fullName, program: hint(record.program) });
   });
   return { emails: [...hints.keys()], hints, duplicatesSkipped: records.length - hints.size };
 }

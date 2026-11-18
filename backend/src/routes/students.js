@@ -40,7 +40,7 @@ async function register(res, { students, duplicatesSkipped }) {
   } finally { client.release(); }
 }
 
-// Bulk: the same CSV format as before (full_name, program, google_account; extra columns ignored).
+// Bulk: first_name + last_name (or full_name), program, google_account, contact_number; extra columns ignored.
 router.post("/faculty/students/import", async (req, res) => register(res, readRegistrationCsv(req.body?.csv)));
 
 // One or more students as JSON, from the single-student form and the attendance preview.

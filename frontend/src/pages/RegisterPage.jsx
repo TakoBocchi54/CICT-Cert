@@ -103,21 +103,40 @@ const SignedInAs = ({ email, onSwitch }) => (
     <button type="button" onClick={onSwitch} className="cursor-pointer font-semibold text-forest underline">Use a different account</button></p>
 );
 
+// Prefill for the two name fields: the last word is the last name. Students correct it if their surname has
+// several words.
+function splitName(fullName) {
+  const name = (fullName ?? '').trim();
+  const at = name.lastIndexOf(' ');
+  return at < 0 ? [name, ''] : [name.slice(0, at).trim(), name.slice(at + 1)];
+}
+
 // New accounts fill in their details; existing ones see theirs prefilled and may correct them.
 function ProfileForm({ seminar, register, onSwitch, onShowConsent }) {
-  const [fullName, setFullName] = useState(seminar.account?.fullName ?? '');
+  const [initialFirst, initialLast] = splitName(seminar.account?.fullName);
+  const [firstName, setFirstName] = useState(initialFirst);
+  const [lastName, setLastName] = useState(initialLast);
   const [program, setProgram] = useState(seminar.account?.program ?? '');
   const [contactNumber, setContactNumber] = useState(seminar.account?.contactNumber ?? '');
   return (
-    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!register.isPending) register.mutate({ fullName, program, contactNumber }); }}>
+    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!register.isPending) register.mutate({ fullName: `${firstName.trim()} ${lastName.trim()}`, program, contactNumber }); }}>
       <p className="text-sm text-ink-soft">{seminar.account ? 'Check your details, then confirm your registration.'
         : 'Enter your details to create your CICT-Cert account and register.'}</p>
       <fieldset disabled={register.isPending} className="space-y-4">
         <div>
-          <label htmlFor="register-name" className="eyebrow mb-2 block">Full name</label>
-          <input id="register-name" className="field" required maxLength={255} autoComplete="name" value={fullName}
-            onChange={event => { register.reset(); setFullName(event.target.value); }} aria-describedby="register-name-hint" />
-          <p id="register-name-hint" className="mt-1.5 text-xs text-ink-muted">Exactly as it should appear on your certificate.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+            <div>
+              <label htmlFor="register-first-name" className="eyebrow mb-2 block">First name</label>
+              <input id="register-first-name" className="field" required maxLength={127} autoComplete="given-name" value={firstName}
+                onChange={event => { register.reset(); setFirstName(event.target.value); }} aria-describedby="register-name-hint" />
+            </div>
+            <div>
+              <label htmlFor="register-last-name" className="eyebrow mb-2 block">Last name</label>
+              <input id="register-last-name" className="field" required maxLength={127} autoComplete="family-name" value={lastName}
+                onChange={event => { register.reset(); setLastName(event.target.value); }} aria-describedby="register-name-hint" />
+            </div>
+          </div>
+          <p id="register-name-hint" className="mt-1.5 text-xs text-ink-muted">Exactly as they should appear on your certificate.</p>
         </div>
         <div>
           <label htmlFor="register-program" className="eyebrow mb-2 block">Program</label>

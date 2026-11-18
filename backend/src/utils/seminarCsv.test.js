@@ -27,6 +27,25 @@ test("registration CSV rejects malformed, empty, oversized or invalid input", ()
   }
 });
 
+test("registration CSV joins first_name and last_name into the full name", () => {
+  const result = readRegistrationCsv("Last_Name,first_name,program,google_account,contact_number\nDela Cruz,Juan Miguel,BSIT,juan@gmail.com,09171234567");
+  assert.equal(result.students[0].full_name, "Juan Miguel Dela Cruz");
+  const split = "first_name,last_name,program,google_account,contact_number\n";
+  for (const csv of [split + "Juan,,BSIT,juan@gmail.com,09171234567", split + ",Cruz,BSIT,juan@gmail.com,09171234567",
+    split + "x".repeat(200) + "," + "y".repeat(60) + ",BSIT,juan@gmail.com,09171234567",
+    "first_name,program,google_account,contact_number\nJuan,BSIT,juan@gmail.com,09171234567",
+    "full_name,first_name,last_name,program,google_account,contact_number\nJuan Cruz,Juan,Cruz,BSIT,juan@gmail.com,09171234567",
+    "program,google_account,contact_number\nBSIT,juan@gmail.com,09171234567"]) {
+    assert.throws(() => readRegistrationCsv(csv), CsvError);
+  }
+});
+
+test("attendance CSV hints accept first_name and last_name", () => {
+  const result = readAttendanceCsv("first_name,last_name,google_account\nAna,Reyes,ana@gmail.com\nBen,,ben@gmail.com");
+  assert.equal(result.hints.get("ana@gmail.com").fullName, "Ana Reyes");
+  assert.equal(result.hints.get("ben@gmail.com").fullName, "Ben");
+});
+
 test("attendance CSV matches only normalized Google emails; name and program are kept as hints only", () => {
   const csv = '\uFEFFfull_name,section,program,student_id, GOOGLE_ACCOUNT \r\nWrong Name,CS 3-1,Wrong Program,00123," JUAN+Seminar@ub.edu.ph "\r\nDifferent Name,Other,Other,999,juan+seminar@ub.edu.ph';
   const result = readAttendanceCsv(csv);

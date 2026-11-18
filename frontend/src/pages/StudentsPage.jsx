@@ -6,7 +6,7 @@ import { useFacultyMe } from '../hooks/useFacultyMe';
 import CsvDropZone from '../components/CsvDropZone';
 import { Btn } from '../components/design-system';
 
-const EMPTY = { fullName: '', program: '', googleAccount: '', contactNumber: '' };
+const EMPTY = { firstName: '', lastName: '', program: '', googleAccount: '', contactNumber: '' };
 
 // Student accounts: registering a Google account is what lets a student sign in. Attendance is matched to these accounts.
 export default function StudentsPage() {
@@ -61,7 +61,7 @@ export default function StudentsPage() {
       <div className="grid gap-6 lg:grid-cols-12">
         <section className="sheet p-8 lg:col-span-7" aria-labelledby="bulk-title">
           <h2 id="bulk-title" className="font-serif text-2xl mb-2">Register from a CSV</h2>
-          <p className="mb-5 text-sm text-ink-muted">Required headers: <code>full_name,program,google_account,contact_number</code>. Extra columns are ignored. Existing accounts are kept unchanged.</p>
+          <p className="mb-5 text-sm text-ink-muted">Required headers: <code>first_name,last_name,program,google_account,contact_number</code>. The first and last name are joined into the name on the certificate. A single <code>full_name</code> column also works instead of the two name columns. Extra columns are ignored. Existing accounts are kept unchanged.</p>
           <CsvDropZone id="students-csv" title="Drop the student CSV" draft={draft} disabled={upload.isPending}
             onDraft={next => { setFileError(''); upload.reset(); setDraft(next); }} onError={setFileError} />
           {fileError && <p role="alert" className="mt-3 text-sm text-revoked">{fileError}</p>}
@@ -75,9 +75,21 @@ export default function StudentsPage() {
 
         <section className="sheet p-8 lg:col-span-5" aria-labelledby="single-title">
           <h2 id="single-title" className="font-serif text-2xl mb-5">Add one student</h2>
-          <form onSubmit={event => { event.preventDefault(); add.mutate(form); }}>
-            <label htmlFor="student-name" className="eyebrow block mb-2">Full name</label>
-            <input id="student-name" className="field mb-4" required maxLength={255} autoComplete="off" {...field('fullName')} />
+          <form onSubmit={event => {
+            event.preventDefault();
+            const { firstName, lastName, ...rest } = form;
+            add.mutate({ ...rest, fullName: `${firstName.trim()} ${lastName.trim()}` });
+          }}>
+            <div className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="student-first-name" className="eyebrow block mb-2">First name</label>
+                <input id="student-first-name" className="field mb-4" required maxLength={127} autoComplete="off" {...field('firstName')} />
+              </div>
+              <div>
+                <label htmlFor="student-last-name" className="eyebrow block mb-2">Last name</label>
+                <input id="student-last-name" className="field mb-4" required maxLength={127} autoComplete="off" {...field('lastName')} />
+              </div>
+            </div>
             <label htmlFor="student-program" className="eyebrow block mb-2">Program</label>
             <input id="student-program" className="field mb-4" required maxLength={255} autoComplete="off" placeholder="e.g. BSIT" {...field('program')} />
             <label htmlFor="student-email" className="eyebrow block mb-2">Google account</label>

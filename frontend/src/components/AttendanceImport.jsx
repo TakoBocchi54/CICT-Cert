@@ -60,7 +60,7 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
       <input id={'attendance-file-' + seminarID} type="file" accept=".csv,text/csv" hidden disabled={busy}
         onChange={async event => { const file = event.target.files?.[0]; event.target.value = '';
           await readCsvFile(file, next => { takeFile(next); onFile?.(); }, error => { setFileError(error); onFile?.(); }); }} />
-      <p className="mb-2 text-ink-soft max-w-2xl">Upload the final recipient list after the seminar. Only <code>google_account</code> is required. If the file has <code>full_name</code> and <code>program</code>, they prefill registration for attendees who don't have an account yet; other columns are ignored.</p>
+      <p className="mb-2 text-ink-soft max-w-2xl">Upload the final recipient list after the seminar. Only <code>google_account</code> is required. If the file has <code>full_name</code> (or <code>first_name</code> and <code>last_name</code>) and <code>program</code>, they prefill registration for attendees who don't have an account yet; other columns are ignored.</p>
       <p className="mb-6 text-sm text-ink-muted max-w-2xl">This list replaces saved attendance for this seminar: students left out are marked absent. Nothing is saved until you confirm.</p>
       {/* Once attendance is confirmed, the upload box stays out of the way unless the list needs correcting. */}
       {attendanceCount > 0 && !correcting && !draft ? <DoneCard count={attendanceCount}
