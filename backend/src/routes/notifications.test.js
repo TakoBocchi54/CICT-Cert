@@ -2,6 +2,7 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { formatCertificateNo } from "../utils/certificateNumber.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { isolatedDatabase, preparedSeminar, seedAccounts, sessionCookie, skip, startAmoy } from "./amoyFixture.js";
@@ -61,7 +62,7 @@ test("notifications for students and faculty, with PostgreSQL and a local Amoy R
     assert.deepEqual([one.unread, one.items[0].link], [1, `/student/certificates/${issued.certificateNo}`]);
     const two = (await request(await student(2))).data;
     assert.deepEqual(kinds(two), ["revoked", "issued"]);
-    assert.match(two.items[0].text, new RegExp(`No\\. ${revoked.certificateNo} for Web Security was revoked: Name misspelled`));
+    assert.match(two.items[0].text, new RegExp(`^Certificate ${formatCertificateNo(revoked.certificateNo, "2026-11-09")} for Web Security was revoked: Name misspelled`));
     assert.deepEqual(kinds((await request(await student(3))).data), []);
   });
 

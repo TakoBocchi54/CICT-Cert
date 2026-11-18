@@ -1,11 +1,13 @@
 import { Lockup, Seal, Btn, Pill, Rosette, Certificate } from '../components/design-system';
 import { useCertificateVerification } from '../hooks/useCertificateVerification';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
+import { formatCertificateNo } from '../lib/certificateNumber';
+import { polygonscan } from '../lib/polygonscan';
 
 const RESULTS = {
   Valid: {
     title: 'Certificate is valid',
-    description: 'This hash is registered and has not been revoked.',
+    description: 'This hash is registered.',
     seal: 'Verified',
     backgroundClass: 'bg-verified',
   },
@@ -41,13 +43,25 @@ const formatTime = value =>
     ? '—'
     : new Date(Number(value) * 1000).toLocaleString();
 
+const longDate = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
 const Row = ({ label, children, mono }) => (
   <div className="hair flex items-baseline justify-between gap-6 py-3 first:border-t-0">
     <dt className="eyebrow shrink-0">{label}</dt>
-    <dd className={`min-w-0 break-all text-right text-sm text-ink ${mono ? 'font-mono text-xs' : 'font-medium'}`}>
+    <dd className={`min-w-0 text-right text-sm text-ink [overflow-wrap:anywhere] ${mono ? 'font-mono text-xs' : 'font-medium'}`}>
       {children}
     </dd>
   </div>
+);
+
+// A value a verifier can open on Polygonscan to check it independently.
+const ScanLink = ({ href, children, label }) => (
+  <a href={href} target="_blank" rel="noreferrer"
+    className="rounded-sm text-forest-600 underline decoration-forest-600/30 underline-offset-2 hover:decoration-forest-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest">
+    {children}
+    <i className="ph-bold ph-arrow-square-out ml-1 align-[-1px]" aria-hidden="true"></i>
+    <span className="sr-only"> ({label}, opens Polygonscan in a new tab)</span>
+  </a>
 );
 
 // Only reachable through a certificate's QR code (/verify?id=<hash>); there is no manual hash entry.
@@ -74,25 +88,34 @@ export default function VerifierPortalPage({
     : verification.error?.message;
   const details = result?.certificate;
 
+  const found = result && result.status !== 'NotFound';
   const chainRecord = result && (
-    <section className="sheet p-6 sm:p-7">
-      <h2 className="eyebrow mb-1">Blockchain record</h2>
+    <section className="sheet p-6 sm:p-7" aria-labelledby="chain-record-title">
+      <h2 id="chain-record-title" className="eyebrow mb-1">Blockchain record</h2>
       <dl>
         <Row label="Network">Polygon Amoy testnet</Row>
         <Row label="Token standard">ERC-5484 (soulbound)</Row>
         <Row label="Status"><Pill status={banner.seal} /></Row>
-        {result.status !== 'NotFound' && <>
-          <Row label="Token ID" mono>{result.tokenId}</Row>
+        {found && <>
+          <Row label="Token ID" mono>
+            {result.contractAddress ? <ScanLink href={polygonscan.token(result.contractAddress, result.tokenId)} label="token">{result.tokenId}</ScanLink> : result.tokenId}
+          </Row>
           <Row label="Batch" mono>#{result.batchId}</Row>
           <Row label="Issued">{formatTime(result.issuedAt)}</Row>
-          <Row label="Revoked">{formatTime(result.revokedAt)}</Row>
-          <Row label="Issuer wallet" mono>{result.issuerAddress}</Row>
-          <Row label="Recipient wallet" mono>{result.recipient}</Row>
+          {result.status === 'Revoked' && <Row label="Revoked">{formatTime(result.revokedAt)}</Row>}
+          {result.transactionHash && <Row label="Issuing transaction" mono>
+            <ScanLink href={polygonscan.tx(result.transactionHash)} label="issuing transaction">{result.transactionHash}</ScanLink>
+          </Row>}
+          <Row label="Issuer wallet" mono><ScanLink href={polygonscan.address(result.issuerAddress)} label="issuer wallet">{result.issuerAddress}</ScanLink></Row>
+          <Row label="Recipient wallet" mono><ScanLink href={polygonscan.address(result.recipient)} label="recipient wallet">{result.recipient}</ScanLink></Row>
         </>}
+        {result.contractAddress && <Row label="Smart contract" mono>
+          <ScanLink href={polygonscan.address(result.contractAddress)} label="smart contract">{result.contractAddress}</ScanLink>
+        </Row>}
       </dl>
       <div className="hair pt-3">
         <div className="eyebrow mb-2">Certificate hash</div>
-        <div className="break-all rounded-lg border border-paper-3 bg-paper-2 p-3 font-mono text-[11px]">{submittedHash}</div>
+        <div className="rounded-lg border border-paper-3 bg-paper-2 p-3 font-mono text-[11px] [overflow-wrap:anywhere]">{submittedHash}</div>
       </div>
     </section>
   );
@@ -165,69 +188,66 @@ export default function VerifierPortalPage({
         )}
 
         {phase === 'result' && (
-          <section className="fade-view">
-            <div className={`relative flex flex-wrap items-center gap-8 overflow-hidden rounded-3xl p-8 text-white md:p-10 ${banner.backgroundClass}`}>
-              <Rosette color="#fff" className="pointer-events-none absolute" style={{ width: 420, right: -120, top: -170, opacity: 0.13 }} />
-              <div className="relative"><Seal status={banner.seal} size={118} animate /></div>
-              <div className="relative min-w-[240px] flex-1">
-                <h1 className="font-serif text-4xl font-medium leading-tight md:text-5xl">
-                  {result.status === 'Valid' && !details ? 'Blockchain record is valid' : banner.title}
-                </h1>
-                <p className="mt-3 text-lg text-white/80">
-                  {banner.description}
-                </p>
+          // One centered column: the verdict, the certificate, then its details, all the same width.
+          <section className="fade-view mx-auto max-w-3xl space-y-6">
+            <div className={`relative overflow-hidden rounded-3xl px-6 py-8 text-center text-white sm:px-10 ${banner.backgroundClass}`}>
+              <Rosette color="#fff" className="pointer-events-none absolute" style={{ width: 420, right: -140, top: -180, opacity: 0.13 }} />
+              <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:text-left">
+                <Seal status={banner.seal} size={96} animate />
+                <div>
+                  <h1 className="font-serif text-3xl font-medium leading-tight text-balance md:text-4xl">
+                    {result.status === 'Valid' && !details ? 'Blockchain record is valid' : banner.title}
+                  </h1>
+                  <p className="mt-2 text-base text-white/85">{banner.description}</p>
+                </div>
               </div>
             </div>
 
-            {details ? (
-              <div className="mt-8 grid items-start gap-8 lg:grid-cols-12">
-                <div className="space-y-4 lg:col-span-7">
-                  <Certificate
-                    tilt={false}
-                    verificationUrl={certificateVerificationUrl(submittedHash, window.location.origin)}
-                    cert={{
-                      id: details.certificateNo,
-                      recipient: details.recipientName,
-                      seminar: details.seminarTitle,
-                      iso: details.seminarDate,
-                      status: banner.seal,
-                      hash: submittedHash,
-                      template: details.template,
-                    }}
-                  />
-                  <p className="text-sm text-ink-soft">
-                    These details match the certificate hash registered on the blockchain. Compare them with the certificate you received.
-                  </p>
+            {details ? <>
+              <figure>
+                <Certificate
+                  tilt={false}
+                  verificationUrl={certificateVerificationUrl(submittedHash, window.location.origin)}
+                  cert={{
+                    id: details.certificateNo,
+                    recipient: details.recipientName,
+                    seminar: details.seminarTitle,
+                    iso: details.seminarDate,
+                    status: banner.seal,
+                    hash: submittedHash,
+                    template: details.template,
+                  }}
+                />
+                <figcaption className="mx-auto mt-3 max-w-xl text-center text-sm text-ink-soft">
+                  These details match the certificate hash registered on the blockchain. Compare them with the certificate you received.
+                </figcaption>
+              </figure>
+
+              <section className="sheet p-6 sm:p-7" aria-labelledby="inspection-title">
+                <h2 id="inspection-title" className="eyebrow mb-1">Inspection record</h2>
+                <div className="hair py-4">
+                  <div className="eyebrow mb-1">Seminar</div>
+                  <div className="font-serif text-xl font-medium leading-snug">{details.seminarTitle}</div>
                 </div>
-                <div className="space-y-6 lg:col-span-5">
-                  <section className="sheet p-6 sm:p-7">
-                    <h2 className="eyebrow mb-1">Inspection record</h2>
-                    <div className="hair py-4">
-                      <div className="eyebrow mb-1">Certificate holder</div>
-                      <div className="font-serif text-3xl font-medium leading-tight">{details.recipientName}</div>
-                    </div>
-                    <div className="hair py-4">
-                      <div className="eyebrow mb-1">Seminar</div>
-                      <div className="font-serif text-xl font-medium leading-snug">{details.seminarTitle}</div>
-                    </div>
-                    <dl>
-                      <Row label="Issuing institution">CICT, University of Batangas</Row>
-                      <Row label="Certificate number" mono>{details.certificateNo}</Row>
-                      <Row label="Seminar date">{details.seminarDate}</Row>
-                    </dl>
-                  </section>
-                  <div>{chainRecord}</div>
+                <div className="hair py-4">
+                  <div className="eyebrow mb-1">Certificate holder</div>
+                  <div className="font-serif text-2xl font-medium leading-tight">{details.recipientName}</div>
                 </div>
-              </div>
-            ) : (
-              <div className="mx-auto mt-8 max-w-2xl space-y-4">
-                {chainRecord}
-                {DETAILS_MESSAGES[result.detailsStatus] && <div role="alert" className="rounded-xl border border-paper-3 bg-paper p-4 text-sm text-ink-soft">
-                  <p>{DETAILS_MESSAGES[result.detailsStatus]} Compare the certificate details before accepting it as proof.</p>
-                  {result.detailsStatus === 'Unavailable' && <Btn variant="line" size="sm" className="mt-3" onClick={() => verification.refetch()}>Try again</Btn>}
-                </div>}
-              </div>
-            )}
+                <dl>
+                  <Row label="Issuing institution">CICT, University of Batangas</Row>
+                  <Row label="Certificate number" mono>{formatCertificateNo(details.certificateNo, details.seminarDate)}</Row>
+                  <Row label="Seminar date">{longDate(details.seminarDate)}</Row>
+                </dl>
+              </section>
+
+              {chainRecord}
+            </> : <>
+              {chainRecord}
+              {DETAILS_MESSAGES[result.detailsStatus] && <div role="alert" className="rounded-xl border border-paper-3 bg-paper p-4 text-sm text-ink-soft">
+                <p>{DETAILS_MESSAGES[result.detailsStatus]} Compare the certificate details before accepting it as proof.</p>
+                {result.detailsStatus === 'Unavailable' && <Btn variant="line" size="sm" className="mt-3" onClick={() => verification.refetch()}>Try again</Btn>}
+              </div>}
+            </>}
           </section>
         )}
       </main>

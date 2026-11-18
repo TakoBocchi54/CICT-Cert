@@ -13,7 +13,8 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
       ? [
           ['faculty-dashboard', 'Dashboard'],
           ['faculty-seminars', 'Seminars'],
-          ['faculty-issue', 'Issue'],
+          // Attendance-only faculty use this page as the check-in desk (Review and Issue are locked for them).
+          ['faculty-issue', canIssue === false ? 'Attendance' : 'Issue'],
           ['faculty-templates', 'Templates'],
           ['faculty-students', 'Students'],
           ['faculty-registry', 'Registry'],
@@ -28,10 +29,10 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
     : 'U';
 
   return (
-    <div className="sticky top-0 z-30 px-4 pt-4">
-      <header className="glass max-w-[1280px] mx-auto rounded-2xl h-16 flex items-center justify-between px-5">
-        <button onClick={() => onNavigate(items[0][0])}>
-          <Lockup small />
+    <div className="sticky top-0 z-30 bg-forest shadow-[0_8px_24px_-16px_rgba(14,59,44,.6)]">
+      <header className="max-w-[1280px] mx-auto h-16 flex items-center justify-between px-4">
+        <button onClick={() => onNavigate(items[0][0])} className="rounded-lg focus-visible:outline-white">
+          <Lockup small light />
         </button>
 
         <nav className="hidden md:flex items-center gap-1">
@@ -41,9 +42,10 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
               <button
                 key={id}
                 onClick={() => onNavigate(id)}
+                aria-current={active ? 'page' : undefined}
                 className={
-                  'px-4 py-2 rounded-xl text-sm font-semibold transition-all ' +
-                  (active ? 'bg-forest text-white shadow' : 'text-ink-soft hover:bg-black/5')
+                  'px-4 py-2 rounded-xl text-sm font-semibold transition-colors focus-visible:outline-white ' +
+                  (active ? 'bg-white text-forest shadow' : 'text-white/80 hover:bg-white/10 hover:text-white')
                 }
               >
                 {label}
@@ -54,8 +56,8 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
 
         <div className="flex items-center gap-3">
           <div className="hidden lg:block text-right leading-tight">
-            <div className="text-sm font-semibold">{userName || 'User'}</div>
-            <div className="text-xs text-ink-muted">{userTitle || (role === 'faculty' ? 'Faculty' : 'Student')}</div>
+            <div className="text-sm font-semibold text-white">{userName || 'User'}</div>
+            <div className="text-xs text-white/70">{userTitle || (role === 'faculty' ? 'Faculty' : 'Student')}</div>
           </div>
 
           <NotificationBell />
@@ -66,7 +68,7 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
               aria-haspopup="menu"
               aria-expanded={menu}
               title="Account"
-              className="w-10 h-10 rounded-xl bg-forest text-white font-semibold text-sm hover:bg-forest-700 transition-colors"
+              className="w-10 h-10 rounded-xl bg-white text-forest font-semibold text-sm hover:bg-paper-2 transition-colors focus-visible:outline-white"
             >
               {userInitials}
             </button>
@@ -110,17 +112,6 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
                       >
                         <i className="ph-bold ph-user-circle" aria-hidden="true"></i>
                         Account settings
-                      </button>
-                    )}
-                    {role === 'faculty' && canIssue && (
-                      <button
-                        role="menuitem"
-                        onClick={() => { setMenu(false); onNavigate('faculty-audit'); }}
-                        aria-current={view === 'faculty-audit' ? 'page' : undefined}
-                        className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-paper-2"
-                      >
-                        <i className="ph-bold ph-clock-counter-clockwise" aria-hidden="true"></i>
-                        Audit log
                       </button>
                     )}
                     <button

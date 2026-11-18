@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Btn } from '../components/design-system';
+import FacultyMembers from '../components/FacultyMembers';
+import AuditLog from '../components/AuditLog';
 
 function Feedback({ value }) {
   if (!value) return null;
@@ -24,10 +27,21 @@ function CardHeading({ icon, title, help, helpId }) {
   );
 }
 
+// ?section= values. Faculty accounts and Audit log need issuing permission: shown greyed out without it.
+const SECTIONS = [
+  ['me', 'My account', 'ph-user', 'Manage your personal details and keep your account secure.'],
+  ['faculty', 'Faculty accounts', 'ph-users-three', 'Add organizers, set what they can do, and switch accounts off.'],
+  ['audit', 'Audit log', 'ph-clock-counter-clockwise', "Every change faculty made, who made it and when. Entries can't be edited or deleted."],
+];
+
 const Bar = ({ className }) => <span className={'block animate-pulse rounded-md bg-paper-2 ' + className} aria-hidden="true" />;
 
 export default function FacultyAccountPage({ onProfileUpdated }) {
   const [account, setAccount] = useState(null);
+  // ?section=faculty|audit opens a permission-only section (the server enforces it too); without permission, My account.
+  const [params, setParams] = useSearchParams();
+  const requested = SECTIONS.some(([value]) => value === params.get('section')) ? params.get('section') : 'me';
+  const section = requested !== 'me' && account?.canIssue ? requested : 'me';
   const [names, setNames] = useState({ firstName: '', lastName: '' });
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [showPasswords, setShowPasswords] = useState(false);
@@ -91,6 +105,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
       await api('/api/faculty/account/password', { method: 'POST', body: passwords });
       setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setShowPasswords(false);
+      setAccount(current => ({ ...current, temporaryPassword: false }));
       setPasswordFeedback({ text: 'Password updated. Use your new password the next time you sign in.' });
     } catch (err) {
       setPasswordFeedback({ error: true, text: err.message });
@@ -108,7 +123,24 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
     <div className="max-w-5xl mx-auto pb-16 md:pb-24">
       <header className="mb-9">
         <h1 className="font-serif text-4xl md:text-5xl font-medium">Account settings</h1>
-        <p className="text-ink-soft mt-4">Manage your personal details and keep your account secure.</p>
+        <p className="text-ink-soft mt-4">{SECTIONS.find(([value]) => value === section)[3]}</p>
+        {account && <nav aria-label="Account settings sections" className="mt-6">
+          <div className="inline-flex max-w-full flex-wrap gap-1 rounded-3xl border border-[var(--line)] bg-paper p-1">
+            {SECTIONS.map(([value, label, icon]) => {
+              const locked = value !== 'me' && !account.canIssue;
+              return (
+                <button key={value} type="button" disabled={locked} aria-current={section === value ? 'page' : undefined}
+                  aria-describedby={locked ? 'sections-locked' : undefined} title={locked ? 'Needs issuing permission' : undefined}
+                  onClick={() => setParams(value === 'me' ? {} : { section: value }, { replace: true })}
+                  className={'flex min-h-10 cursor-pointer items-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest disabled:cursor-not-allowed disabled:opacity-45 '
+                    + (section === value ? 'bg-forest text-white shadow' : 'text-ink-soft hover:bg-black/5 disabled:hover:bg-transparent')}>
+                  <i className={'ph-bold ' + (locked ? 'ph-lock-simple' : icon)} aria-hidden="true"></i>{label}
+                </button>
+              );
+            })}
+          </div>
+          {!account.canIssue && <p id="sections-locked" className="mt-2 text-xs text-ink-muted">Faculty accounts and the audit log need issuing permission.</p>}
+        </nav>}
       </header>
       {loadError ? (
         <section role="alert" className="flex flex-wrap items-center gap-4 rounded-2xl bg-revoked-bg p-5 text-sm text-revoked">
@@ -122,7 +154,15 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
           <div className="sheet p-6 space-y-4"><Bar className="h-14 w-14 !rounded-2xl" /><Bar className="h-7 w-2/3" /><Bar className="h-4 w-1/3" /><Bar className="!mt-8 h-16 w-full" /></div>
           <div className="lg:col-span-2 sheet p-6 md:p-8 space-y-4"><Bar className="h-7 w-1/2" /><Bar className="h-4 w-2/3" /><Bar className="!mt-8 h-12 w-full" /><Bar className="h-12 w-full" /></div>
         </div>
-      ) : (
+      ) : section === 'faculty' ? (
+        <FacultyMembers myFacultyID={account.facultyID} />
+      ) : section === 'audit' ? (
+        <AuditLog />
+      ) : (<>
+        {account.temporaryPassword && <p role="status" className="mb-6 flex items-start gap-3 rounded-2xl bg-pending-bg p-4 text-sm text-ink-soft">
+          <i className="ph-bold ph-key mt-0.5 text-lg text-pending" aria-hidden="true"></i>
+          <span><strong className="font-semibold text-ink">You're using a temporary password.</strong> It was set by an administrator. Set your own below so only you know it.</span>
+        </p>}
         <div className="grid lg:grid-cols-3 gap-6 items-start">
           <aside className="sheet p-6" aria-labelledby="account-name">
             <div className="w-14 h-14 rounded-2xl bg-forest text-white flex items-center justify-center text-xl font-semibold mb-5 shadow" aria-hidden="true">
@@ -152,7 +192,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
             </dl>
             <p className="hair mt-6 pt-5 flex items-start gap-2 text-xs text-ink-muted leading-relaxed">
               <i className="ph-bold ph-info mt-0.5" aria-hidden="true"></i>
-              Your email, faculty ID, and issuance permission are managed by your administrator.
+              {account.canIssue ? 'Your email and permissions are managed in Faculty accounts by another administrator.' : 'Your email, faculty ID, and issuance permission are managed by your administrator.'}
             </p>
           </aside>
           <div className="lg:col-span-2 space-y-6">
@@ -205,7 +245,7 @@ export default function FacultyAccountPage({ onProfileUpdated }) {
             </form>
           </div>
         </div>
-      )}
+      </>)}
     </div>
   );
 }

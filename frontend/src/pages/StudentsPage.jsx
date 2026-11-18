@@ -110,7 +110,7 @@ export default function StudentsPage() {
           <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-white">
             <table className="w-full min-w-[720px] text-left text-sm">
               <caption className="sr-only">Registered students</caption>
-              <thead className="bg-paper-2"><tr>
+              <thead className="bg-table-head shadow-[inset_0_-1px_0_var(--line)]"><tr>
                 <th scope="col" className="p-3">Name</th><th scope="col" className="p-3">Program</th>
                 <th scope="col" className="p-3">Google account</th><th scope="col" className="p-3">Contact</th><th scope="col" className="p-3">Wallet</th>
                 <th scope="col" className="p-3 text-center">Seminars</th><th scope="col" className="p-3 text-center">Certificates</th>

@@ -65,7 +65,7 @@ export async function verifyCertificate(certHash) {
     const { bitmap, siblings } = smtProof(set, included.tokenID);
     const [status, recipient, batchId, , issuedAt] = await client.readContract({ address, abi, functionName: "verify",
         args: [BigInt(included.tokenID), certHash, included.merkleProof, bitmap, siblings] });
-    return { status, tokenID: included.tokenID, recipient, batchId, issuedAt };
+    return { status, tokenID: included.tokenID, recipient, batchId, issuedAt, transactionHash: included.transactionHash };
 }
 
 export async function certificateIssuer() {

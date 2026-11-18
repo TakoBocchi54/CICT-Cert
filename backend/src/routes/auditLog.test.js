@@ -140,4 +140,14 @@ test("audit log with PostgreSQL", { skip: !local && "Requires local PostgreSQL; 
     const rows = await entries(before + 1);
     assert.deepEqual(rows.at(-1).details, { certificateNos: [3, "4"], reason: "x".repeat(300) });
   });
+
+  await t.test("a change to a faculty account names that account, not its internal ID", async () => {
+    await db.query(`INSERT INTO audit_log ("actorFacultyID", "actorName", "action", "ids") VALUES
+      (1, 'Ana Reyes', 'PATCH /faculty/members/:id', '[2]'), (1, 'Ana Reyes', 'PATCH /faculty/members/:id', '[999]'),
+      (1, 'Ana Reyes', 'DELETE /faculty/students/:id', '[2]')`);
+    const [student, gone, changed] = (await request("GET", "/faculty/audit-log?limit=3")).data;
+    assert.deepEqual([changed.targetName, changed.targetEmail], ["Pedro Cruz", "assistant@example.test"]);
+    assert.deepEqual([gone.targetName, gone.targetEmail], [null, null], "a removed account has no name");
+    assert.equal(student.targetName, null, "other routes' IDs are not looked up as faculty");
+  });
 });

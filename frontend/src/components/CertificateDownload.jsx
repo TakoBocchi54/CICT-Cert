@@ -4,6 +4,7 @@ import { Btn, Certificate } from './design-system';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { pageSizeMm } from '../lib/certificateTemplate';
 import { saveBlob } from '../lib/saveBlob';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 export default function CertificateDownload({ cert, onClose }) {
   const dialog = useRef(null);
@@ -27,8 +28,8 @@ export default function CertificateDownload({ cert, onClose }) {
       const node = exportTemplate.current.firstElementChild;
       const png = await toPng(node, { pixelRatio: 3, preferredFontFormat: 'woff2',
         filter: element => !element.classList?.contains('cert-reveal') });
-      const bytes = await createCertificatePdf(png, pageSizeMm(cert.template), cert.id);
-      saveBlob(new Blob([bytes], { type: 'application/pdf' }), `CICT-Certificate-${cert.id}.pdf`);
+      const bytes = await createCertificatePdf(png, pageSizeMm(cert.template), formatCertificateNo(cert.id, cert.iso));
+      saveBlob(new Blob([bytes], { type: 'application/pdf' }), `Certificate-${formatCertificateNo(cert.id, cert.iso)}.pdf`);
     } catch { setError('Could not generate the certificate PDF. Please try again.'); }
     finally { setDownloading(false); }
   }
@@ -37,7 +38,7 @@ export default function CertificateDownload({ cert, onClose }) {
     className="m-auto max-h-[90vh] w-[calc(100%_-_2rem)] max-w-5xl overflow-auto rounded-2xl border border-paper-3 bg-paper p-4 text-ink shadow-xl backdrop:bg-black/40 md:p-6">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h2 id="certificate-download-title" className="font-serif text-2xl">Download certificate #{cert.id}</h2>
+        <h2 id="certificate-download-title" className="font-serif text-2xl">Download certificate {formatCertificateNo(cert.id, cert.iso)}</h2>
         <p className="mt-2 text-sm text-ink-soft">Download the certificate as a PDF. Scan its QR code to open the public verification page.</p>
       </div>
       <Btn variant="line" size="sm" onClick={onClose}>Close</Btn>

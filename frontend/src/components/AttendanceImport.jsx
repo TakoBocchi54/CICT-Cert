@@ -117,7 +117,10 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
         ? <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
           {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
         </Btn>
-        : <Btn iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>, actionSlot)}
+        : onContinue ? <Btn iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>
+          // Attendance-only faculty: the wizard ends here (see IssuancePage).
+          : <p className="flex items-center gap-2 text-sm text-ink-muted"><i className="ph-bold ph-lock-simple" aria-hidden="true"></i>
+            Someone with issuing permission will review names and issue the certificates.</p>, actionSlot)}
     </div>
   );
 }
@@ -129,7 +132,7 @@ const PreviewTable = ({ title, head, children }) => (
     <div className="max-h-[360px] overflow-auto">
       <table className="w-full min-w-[560px] text-left text-sm">
         <caption className="sr-only">{title}</caption>
-        <thead className="sticky top-0 z-10 bg-paper-2"><tr>{head.map(h => <th key={h} scope="col" className="p-3">{h}</th>)}</tr></thead>
+        <thead className="sticky top-0 z-10 bg-table-head shadow-[inset_0_-1px_0_var(--line)]"><tr>{head.map(h => <th key={h} scope="col" className="p-3">{h}</th>)}</tr></thead>
         <tbody>{children}</tbody>
       </table>
     </div>

@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { certificateContract, certificateIssuer, revokedTokenIds } from "./certificates.js";
 import { IssuanceError, ensureIssuerWallet, finalizedReceipt, lockIssuer, signIssuerCall } from "./issuance.js";
 import { smtRoot } from "../utils/merkle.js";
+import { formatCertificateNo } from "../utils/certificateNumber.js";
 
 const MAX_REASON_LENGTH = 500;
 // shortcut: one revocation transaction takes at most 200 certificates (about 0.1M gas); raise it if a recall ever needs more.
@@ -32,7 +33,7 @@ function result(certificate, attempt) {
 }
 
 // The registration's current non-revoked certificate, i.e. the replacement of a revoked one.
-const activeCertificate = (db, certificate) => db.query(`SELECT "certificateNo", status FROM certificate
+const activeCertificate = (db, certificate) => db.query(`SELECT "certificateNo", status, to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate" FROM certificate
   WHERE "seminarID" = $1 AND "studentID" = $2 AND status <> 'REVOKED'`, [certificate.seminarID, certificate.studentID]).then(r => r.rows[0]);
 
 export async function findCertificate(certificateNo) {
@@ -114,9 +115,9 @@ export async function revokeCertificates(certificateNos, faculty, reason, allowN
     const batch = certificates.filter(certificate => certificate.status !== "REVOKED");
     if (!allowNew || !batch.length) return await finish();
     for (const certificate of batch) {
-      if (certificate.status !== "ISSUED") throw new IssuanceError(409, `Only issued certificates can be revoked (certificate No. ${certificate.certificateNo}).`);
+      if (certificate.status !== "ISSUED") throw new IssuanceError(409, `Only issued certificates can be revoked (certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}).`);
       if (!certificate.tokenID || !certificate.walletAddress || certificate.mintContract?.toLowerCase() !== context.contractAddress) {
-        throw new IssuanceError(409, `Certificate No. ${certificate.certificateNo} was not minted by the configured contract. Contact CICT to reconcile it.`);
+        throw new IssuanceError(409, `Certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)} was not minted by the configured contract. Contact CICT to reconcile it.`);
       }
     }
     const account = await lockIssuer(client, context, faculty);
@@ -198,7 +199,7 @@ export async function prepareReplacement(certificateNo, faculty, body) {
     const original = (await client.query(CERTIFICATES + ` FOR UPDATE OF c`, [[certificateNo]])).rows[0];
     if (original.status !== "REVOKED") throw new IssuanceError(409, "Only a revoked certificate can be replaced. Revoke it first.");
     const existing = await activeCertificate(client, original);
-    if (existing) throw new IssuanceError(409, `A replacement already exists: certificate No. ${existing.certificateNo}.`);
+    if (existing) throw new IssuanceError(409, `A replacement already exists: certificate ${formatCertificateNo(existing.certificateNo, existing.seminarDate)}.`);
     if (!original.attended) throw new IssuanceError(409, "The recipient's attendance is no longer confirmed for this seminar.");
     const issuer = await ensureIssuerWallet(client, context);
     const { rows } = await client.query(

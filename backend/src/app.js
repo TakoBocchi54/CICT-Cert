@@ -17,6 +17,7 @@ import templateRoutes from "./routes/templates.js";
 import registrationRoutes from "./routes/registration.js";
 import notificationRoutes from "./routes/notifications.js";
 import auditLogRoutes from "./routes/auditLog.js";
+import facultyMemberRoutes from "./routes/facultyMembers.js";
 import { auditLog } from "./middleware/auditLog.js";
 
 const app = express();
@@ -45,5 +46,6 @@ app.use("/api", templateRoutes);
 app.use("/api", registrationRoutes);
 app.use("/api", notificationRoutes);
 app.use("/api", auditLogRoutes);
+app.use("/api", facultyMemberRoutes);
 
 export default app;

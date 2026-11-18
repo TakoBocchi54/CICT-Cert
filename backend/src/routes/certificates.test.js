@@ -61,7 +61,8 @@ test("public verification proves inclusion and non-revocation on chain and publi
       assert.equal(response.data.recipient, wallets[i]); assert.equal(response.data.issuerAddress, amoy.context.issuerAddress);
       assert.ok(Number(response.data.issuedAt) > 0); assert.equal(response.data.revokedAt, "0");
       assert.equal(response.data.detailsStatus, "Verified"); assert.deepEqual(response.data.certificate, publicDetails(i));
-      assert.deepEqual(Object.keys(response.data).sort(), ["batchId", "certificate", "detailsStatus", "issuedAt", "issuerAddress", "recipient", "revokedAt", "status", "tokenId"]);
+      assert.equal(response.data.contractAddress, amoy.context.contractAddress); assert.equal(response.data.transactionHash, issued.transactionHash);
+      assert.deepEqual(Object.keys(response.data).sort(), ["batchId", "certificate", "contractAddress", "detailsStatus", "issuedAt", "issuerAddress", "recipient", "revokedAt", "status", "tokenId", "transactionHash"]);
     }
   });
 

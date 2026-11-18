@@ -3,6 +3,7 @@ import { jwtVerify } from "jose";
 import { pool } from "../db/pool.js";
 import { secret, COOKIE } from "../utils/session.js";
 import { issuerBalance } from "../services/certificates.js";
+import { formatCertificateNo } from "../utils/certificateNumber.js";
 
 // In-app notifications for both roles. There is no events table: each item is derived from timestamps the app
 // already keeps, and users."notificationsSeenAt" marks what the account has read.
@@ -17,11 +18,11 @@ router.use("/notifications", async (req, res, next) => {
   try {
     const { payload } = await jwtVerify(req.cookies[COOKIE] ?? "", secret);
     const { rows: [user] } = await pool.query(
-      `SELECT u."userID", u."role", u."notificationsSeenAt", f."facultyID", f."canIssue", s."studentID"
+      `SELECT u."userID", u."role", u."notificationsSeenAt", f."facultyID", f."canIssue", f."deactivatedAt", s."studentID"
        FROM users u LEFT JOIN cict_faculty f ON f."userID" = u."userID" LEFT JOIN student s ON s."userID" = u."userID"
        WHERE u."userID" = $1`, [payload.userID]);
     const valid = user && user.role === payload.role && (payload.role === "FACULTY"
-      ? user.facultyID != null && String(user.facultyID) === String(payload.facultyID)
+      ? user.facultyID != null && !user.deactivatedAt && String(user.facultyID) === String(payload.facultyID)
       : payload.role === "STUDENT" && user.studentID != null && String(user.studentID) === String(payload.studentID));
     if (!valid) throw new Error("Unknown account");
     req.account = user;
@@ -33,7 +34,7 @@ router.use("/notifications", async (req, res, next) => {
 
 async function studentItems(studentID) {
   const { rows } = await pool.query(
-    `SELECT c."certificateNo", c."seminarTitle", c."issuedAt", c."revokedAt",
+    `SELECT c."certificateNo", c."seminarTitle", to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate", c."issuedAt", c."revokedAt",
        (SELECT b."revocationReason" FROM blockchain_record b WHERE b."certificateID" = c."certificateID" AND b."transactionType" = 'REVOKE'
         AND b."transactionStatus" = 'CONFIRMED' ORDER BY b."transactionID" DESC LIMIT 1) AS "reason"
      FROM certificate c WHERE c."studentID" = $1 AND c.status IN ('ISSUED', 'REVOKED')
@@ -43,7 +44,7 @@ async function studentItems(studentID) {
     recent(row.issuedAt) && { id: `issued:${row.certificateNo}`, kind: "issued", at: row.issuedAt, link: `/student/certificates/${row.certificateNo}`,
       text: `Your certificate for ${row.seminarTitle} is ready.` },
     recent(row.revokedAt) && { id: `revoked:${row.certificateNo}`, kind: "revoked", at: row.revokedAt, link: `/student/certificates/${row.certificateNo}`,
-      text: `Certificate No. ${row.certificateNo} for ${row.seminarTitle} was revoked${row.reason ? `: ${row.reason}` : "."}` },
+      text: `Certificate ${formatCertificateNo(row.certificateNo, row.seminarDate)} for ${row.seminarTitle} was revoked${row.reason ? `: ${row.reason}` : "."}` },
   ].filter(Boolean));
 }
 

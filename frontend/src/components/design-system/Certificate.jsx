@@ -2,6 +2,7 @@ import { Mark } from './Mark';
 import { Seal } from './Seal';
 import { Rosette } from './Rosette';
 import { QR } from './QR';
+import { formatCertificateNo } from '../../lib/certificateNumber';
 
 const STATUS_CONFIG = {
   Verified: { color: '#157347', icon: 'ph-seal-check', word: 'VERIFIED' },
@@ -25,7 +26,7 @@ const longDate = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', 
 // layout is identical in thumbnails, the template editor and the exported PDF. fieldProps lets the editor make fields draggable.
 function TemplateLayout({ cert, template, verificationUrl, fieldProps }) {
   const { text, qr, signatures = [] } = template.fields;
-  const values = { recipientName: cert.recipient, seminarTitle: cert.seminar, seminarDate: longDate(cert.iso), certificateNo: 'No. ' + cert.id };
+  const values = { recipientName: cert.recipient, seminarTitle: cert.seminar, seminarDate: longDate(cert.iso), certificateNo: 'No. ' + formatCertificateNo(cert.id, cert.iso) };
   const placed = (key, x, y, shiftX, extra = {}) => {
     const { style, ...props } = { ...fieldProps?.(key), ...extra };
     return { ...props, style: { position: 'absolute', left: x + '%', top: y + '%', transform: `translate(${shiftX}, -50%)`, ...style } };
@@ -83,7 +84,7 @@ export const Certificate = ({ cert, theme = 'classic', tilt = true, draft = fals
           </div>
           <div className="font-mono text-right" style={{ fontSize: '1.3cqw', color: '#6a7a70' }}>
             <div style={{ letterSpacing: '.16em', fontSize: '1cqw', fontFamily: 'Inter', fontWeight: 600 }}>CREDENTIAL ID</div>
-            {cert.id}
+            {formatCertificateNo(cert.id, cert.iso)}
           </div>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center" style={{ marginTop: '-1cqw' }}>

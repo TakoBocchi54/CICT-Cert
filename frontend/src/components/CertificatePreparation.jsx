@@ -5,6 +5,7 @@ import { Btn } from './design-system';
 import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
 import { certificateProgress } from '../lib/certificateProgress';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const count = (n, noun = 'certificate') => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
@@ -94,13 +95,13 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
       No certificates prepared yet.{mode === 'review' ? ' Prepare them for everyone marked attended.' : ' Prepare them in the Review step.'}</p> : <div className="mt-4 max-h-[480px] overflow-auto rounded-xl border border-[var(--line)]">
       <table className="w-full min-w-[500px] text-left text-sm">
         <caption className="sr-only">Prepared certificates: the name printed on each and its progress</caption>
-        <thead className="sticky top-0 z-10 bg-paper-2"><tr>{['No.', 'Name on certificate', 'Progress'].map(head =>
+        <thead className="sticky top-0 z-10 bg-table-head shadow-[inset_0_-1px_0_var(--line)]"><tr>{['No.', 'Name on certificate', 'Progress'].map(head =>
           <th key={head} scope="col" className="eyebrow px-4 py-3 font-semibold">{head}</th>)}</tr></thead>
         <tbody className="divide-y divide-[var(--line)]">{rows.map(certificate => <tr key={certificate.certificateID} className="align-top hover:bg-paper">
-          <td className="px-4 py-3 font-mono">{certificate.certificateNo}</td>
+          <td className="px-4 py-3 font-mono">{formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}</td>
           <td className="px-4 py-3">
             {editing?.id === certificate.certificateID ? <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); if (!busy) rename.mutate(editing); }}>
-              <label htmlFor={`recipient-name-${certificate.certificateID}`} className="sr-only">Name on certificate No. {certificate.certificateNo}</label>
+              <label htmlFor={`recipient-name-${certificate.certificateID}`} className="sr-only">Name on certificate {formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}</label>
               <input id={`recipient-name-${certificate.certificateID}`} className="field !py-1.5 !text-sm min-w-0 flex-1" required maxLength={255} autoComplete="off" autoFocus
                 value={editing.name} onChange={event => setEditing({ ...editing, name: event.target.value })} />
               <Btn type="submit" size="sm" disabled={busy}>{rename.isPending ? 'Saving...' : 'Save'}</Btn>
@@ -110,7 +111,7 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
               {certificate.recipientName}
               <span className="block break-all text-xs text-ink-soft">{certificate.email}</span>
               {mode === 'review' && canIssue && unissued(certificate) && <Btn variant="ghost" size="sm" icon="ph-pencil-simple" className="mt-1" disabled={busy}
-                aria-label={`Correct the name on certificate No. ${certificate.certificateNo}`}
+                aria-label={`Correct the name on certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}`}
                 onClick={() => { rename.reset(); setEditing({ id: certificate.certificateID, name: certificate.recipientName }); }}>Correct name</Btn>}
             </>}
           </td>
@@ -147,7 +148,7 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
       {outcome?.skipped?.length > 0 && <div className="text-sm text-ink-soft">
         <p className="font-medium">Not issued ({outcome.skipped.length}):</p>
         <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-auto pl-5">
-          {outcome.skipped.map(skipped => <li key={skipped.certificateNo}>No. {skipped.certificateNo}, {skipped.recipientName}: {skipped.reason}</li>)}
+          {outcome.skipped.map(skipped => <li key={skipped.certificateNo}>{formatCertificateNo(skipped.certificateNo, skipped.seminarDate)}, {skipped.recipientName}: {skipped.reason}</li>)}
         </ul>
       </div>}
     </div>}

@@ -3,11 +3,6 @@ import { Certificate, Seal, Pill, Btn } from '../components/design-system';
 
 const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 
-const STATUS_CONFIG = {
-  Verified: { color: '#157347' },
-  Revoked: { color: '#b3261e' },
-};
-
 function WalletCard({ walletAddress }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -123,42 +118,12 @@ export default function StudentDashboardPage({ certificates = [], onCertificateC
                 </button>
               ))}
             </div>
-          </div>
-        </aside>
-
-        {/* Credential history: subtle */}
-        <section className="lg:col-span-12 mt-4">
-          <div className="flex items-end justify-between mb-5">
-            <h2 className="font-serif text-3xl font-medium">Credential history</h2>
-            <button type="button" onClick={onNavigateCollection} className="inline-flex items-center gap-1.5 text-sm font-semibold text-forest-600 hover:underline">
+            <button type="button" onClick={onNavigateCollection}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-forest-600 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest">
               View full collection <i className="ph-bold ph-arrow-right" aria-hidden="true"></i>
             </button>
           </div>
-          <div className="relative">
-            <div className="absolute left-0 right-0 top-[11px] h-px bg-[var(--line)]"></div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 relative">
-              {[...sortedCerts].reverse().map(c => (
-                <button
-                  type="button"
-                  key={c.id}
-                  onClick={() => onCertificateClick(c)}
-                  className="text-left group"
-                >
-                  <div
-                    className="w-[23px] h-[23px] rounded-full border-2 bg-paper flex items-center justify-center mb-4"
-                    style={{ borderColor: STATUS_CONFIG[c.status].color }}
-                  >
-                    <div className="w-2 h-2 rounded-full" style={{ background: STATUS_CONFIG[c.status].color }}></div>
-                  </div>
-                  <div className="eyebrow">{fmt(c.iso).slice(0, 6)}</div>
-                  <div className="font-serif leading-snug mt-1 group-hover:underline decoration-[var(--line)] underline-offset-4">
-                    {c.seminar}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+        </aside>
       </div>
     </div>
   );

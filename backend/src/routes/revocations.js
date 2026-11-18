@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { IssuanceError } from "../services/issuance.js";
 import { issuerBalance } from "../services/certificates.js";
 import { findCertificate, prepareReplacement, revokeCertificates } from "../services/revocation.js";
+import { parseCertificateNoQuery } from "../utils/certificateNumber.js";
 
 const router = Router();
 router.use("/faculty/certificates", requireFaculty, requireActiveFaculty);
@@ -18,7 +19,7 @@ router.param("certificateNo", (req, res, next, value) => {
 // Registered before :certificateNo, which would otherwise reject "summary" as an invalid number.
 router.get("/faculty/certificates/summary", async (_req, res) => {
   const list = (status, column) => pool.query(
-    `SELECT "certificateNo", "recipientName", "seminarTitle", "${column}" AS "at" FROM certificate
+    `SELECT "certificateNo", "recipientName", "seminarTitle", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate", "${column}" AS "at" FROM certificate
      WHERE status = $1 ORDER BY "${column}" DESC LIMIT ${status === "ISSUED" ? 4 : 3}`, [status]);
   const [counts, issued, revoked] = await Promise.all([
     pool.query(`SELECT count(*) FILTER (WHERE status = 'ISSUED')::int AS "issuedCount", count(*) FILTER (WHERE status = 'REVOKED')::int AS "revokedCount" FROM certificate`),
@@ -53,7 +54,7 @@ router.get("/faculty/certificates", async (req, res) => {
      WHERE c."status" = ANY($1) AND ($2 = '' OR c."certificateNo"::text = $3 OR c."recipientName" ILIKE '%' || $2 || '%'
        OR u."email" ILIKE '%' || $2 || '%' OR c."seminarTitle" ILIKE '%' || $2 || '%')
      ORDER BY c."issuedAt" DESC, c."certificateNo" DESC LIMIT 200`,
-    [statuses, q.replace(/[\\%_]/g, "\\$&"), q.replace(/^#/, "")],
+    [statuses, q.replace(/[\\%_]/g, "\\$&"), parseCertificateNoQuery(q)],
   );
   res.json(rows);
 });

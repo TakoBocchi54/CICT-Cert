@@ -11,7 +11,7 @@ const KINDS = {
   attendance: "/(registrations|attendance|registration)/",
   seminars: "^[A-Z]+ /faculty/seminars(/:id)?$",
   students: "^[A-Z]+ /faculty/students",
-  account: "/(certificate-templates|account)",
+  account: "/(certificate-templates|account|members)",
 };
 
 // Newest first. ?before=<auditID> continues after the last row of the previous page; ?q= matches the actor or the action.
@@ -23,12 +23,28 @@ router.get("/faculty/audit-log", async (req, res) => {
   if (before !== null && !/^[1-9]\d{0,17}$/.test(before)) return res.status(400).json({ error: "Invalid cursor." });
   const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
   const pattern = "%" + q.replace(/[\\%_]/g, "\\$&") + "%";
+  // For /faculty/members/:id the URL only holds the changed account's internal ID, so its name and email are looked
+  // up here (current values; NULL once the account is gone) for the page to show instead of the number.
   const { rows } = await pool.query(
-    `SELECT "auditID", "at", "actorFacultyID", "actorName", "actorEmail", "action", "ids", "details" FROM audit_log
-     WHERE ($1::bigint IS NULL OR "auditID" < $1::bigint)
-       AND ($2 = '' OR "actorName" ILIKE $3 OR "actorEmail" ILIKE $3 OR "action" ILIKE $3)
-       AND ($5::text IS NULL OR "action" ~ $5)
-     ORDER BY "auditID" DESC LIMIT $4`, [before, q, pattern, limit, kind]);
+    `SELECT a."auditID", a."at", a."actorFacultyID", a."actorName", a."actorEmail", a."action", a."ids", a."details",
+            tf."firstName" || ' ' || tf."lastName" AS "targetName", tu."email" AS "targetEmail"
+     FROM audit_log a
+     LEFT JOIN cict_faculty tf ON a."action" ~ '^[A-Z]+ /faculty/members/:id' AND tf."facultyID" = (a."ids"->>0)::bigint
+     LEFT JOIN users tu ON tu."userID" = tf."userID"
+     WHERE ($1::bigint IS NULL OR a."auditID" < $1::bigint)
+       AND ($2 = '' OR a."actorName" ILIKE $3 OR a."actorEmail" ILIKE $3 OR a."action" ILIKE $3)
+       AND ($5::text IS NULL OR a."action" ~ $5)
+     ORDER BY a."auditID" DESC LIMIT $4`, [before, q, pattern, limit, kind]);
+  // Certificate numbers (in /faculty/certificates/:id/... and a batch revoke's certificateNos) are shown with their
+  // seminar date, e.g. 20261118-0042, so each row gets the dates of the numbers it mentions.
+  const numbersOf = row => [...(/^[A-Z]+ \/faculty\/certificates\/:id/.test(row.action) ? [row.ids[0]] : []),
+    ...(Array.isArray(row.details?.certificateNos) ? row.details.certificateNos : [])]
+    .map(Number).filter(no => Number.isInteger(no) && no > 0 && no <= 2147483647);
+  const numbers = [...new Set(rows.flatMap(numbersOf))];
+  const dates = numbers.length ? new Map((await pool.query(
+    `SELECT "certificateNo", to_char("seminarDate", 'YYYY-MM-DD') AS "seminarDate" FROM certificate WHERE "certificateNo" = ANY($1::int[])`,
+    [numbers])).rows.map(row => [row.certificateNo, row.seminarDate])) : new Map();
+  for (const row of rows) row.certificateDates = Object.fromEntries(numbersOf(row).filter(no => dates.has(no)).map(no => [no, dates.get(no)]));
   res.json(rows);
 });
 

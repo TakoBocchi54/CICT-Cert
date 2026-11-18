@@ -22,6 +22,10 @@ CREATE TABLE cict_faculty (
     "firstName" VARCHAR(255) NOT NULL,
     "lastName" VARCHAR(255) NOT NULL,
     "canIssue" BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Switched off, never deleted (other records point here). NULL = active.
+    "deactivatedAt" TIMESTAMPTZ,
+    -- True after an administrator generated the password, until its owner sets their own.
+    "temporaryPassword" BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT fk_faculty_user
         FOREIGN KEY ("userID")
         REFERENCES users ("userID")

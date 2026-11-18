@@ -14,7 +14,6 @@ import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
 import StudentsPage from './pages/StudentsPage';
-import AuditLogPage from './pages/AuditLogPage';
 import RegistryPage from './pages/RegistryPage';
 import TemplatesPage from './pages/TemplatesPage';
 import SeminarsPage from './pages/SeminarsPage';
@@ -145,7 +144,6 @@ function AppContent() {
       'faculty-students': '/faculty/students',
       'faculty-registry': '/faculty/registry',
       'faculty-templates': '/faculty/templates',
-      'faculty-audit': '/faculty/audit-log',
       'faculty-account': '/faculty/account',
     };
     navigate(routes[view] || '/');
@@ -171,7 +169,6 @@ function AppContent() {
     '/faculty/students': 'faculty-students',
     '/faculty/registry': 'faculty-registry',
     '/faculty/templates': 'faculty-templates',
-    '/faculty/audit-log': 'faculty-audit',
     '/faculty/revocation': 'faculty-registry', // reached from a Registry row
     '/faculty/account': 'faculty-account',
   })[location.pathname] || (location.pathname.startsWith('/student/certificates/') ? 'student-certificates' : '');
@@ -182,7 +179,7 @@ function AppContent() {
     : studentCertificates.error ? <p role="alert" className="text-sm text-revoked">{studentCertificates.error.message}</p> : null;
   const studentCerts = (studentCertificates.data || []).filter(certificate => ['ISSUED', 'REVOKED'].includes(certificate.status))
     .map(certificate => ({ id: certificate.certificateNo, certificateID: certificate.certificateID, recipient: certificate.recipientName,
-      seminar: certificate.seminarTitle, iso: certificate.seminarDate, hash: certificate.certificateHash,
+      seminar: certificate.seminarTitle, iso: certificate.seminarDate, issuedAt: certificate.issuedAt, hash: certificate.certificateHash,
       status: certificate.status === 'ISSUED' ? 'Verified' : 'Revoked', block: certificate.blockNum,
       tokenID: certificate.tokenID, transactionHash: certificate.transactionHash, template: certificate.template }));
   const selectedCertificate = user?.role === 'student' && studentCerts.find(certificate => certificate.id === selectedCertId);
@@ -246,7 +243,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentDashboardPage
                     certificates={studentCerts}
@@ -276,7 +273,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCollectionPage
                     certificates={studentCerts}
@@ -303,7 +300,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   {certificatesStatus}
                   {!studentCertificates.isPending && !studentCertificates.error && <StudentCertificatePage
                     certificates={studentCerts}
@@ -326,7 +323,7 @@ function AppContent() {
               <>
                 <TopNav role="faculty" view={currentView} onNavigate={handleNavigate}
                   onSignOut={handleSignOut} userName={user.name} userTitle={user.title} />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <FacultyAccountPage onProfileUpdated={account => setUser(current => ({
                     ...current,
                     name: account.firstName + ' ' + account.lastName,
@@ -351,7 +348,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <FacultyDashboardPage
                     onIssueClick={seminarID => navigate('/faculty/issue' + (seminarID ? '?seminar=' + encodeURIComponent(seminarID) : ''))}
                     onNavigateRevocation={() => navigate('/faculty/registry?status=REVOKED')}
@@ -378,7 +375,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <IssuancePage 
                     onNavigateRegistry={() => navigate('/faculty/dashboard')}
                     onNavigateSeminars={() => navigate('/faculty/seminars')}
@@ -403,7 +400,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <RevocationPage initialNo={new URLSearchParams(location.search).get('no') || ''} onBack={() => navigate('/faculty/registry')} />
                 </main>
               </>
@@ -426,7 +423,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <SeminarsPage />
                 </main>
               </>
@@ -449,7 +446,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <StudentsPage />
                 </main>
               </>
@@ -459,20 +456,8 @@ function AppContent() {
           }
         />
 
-        <Route
-          path="/faculty/audit-log"
-          element={
-            user?.role === 'faculty' && user.canIssue ? (
-              <>
-                <TopNav role="faculty" view={currentView} onNavigate={handleNavigate}
-                  onSignOut={handleSignOut} userName={user.name} userTitle={user.title} />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
-                  <AuditLogPage />
-                </main>
-              </>
-            ) : <Navigate to={user?.role === 'faculty' ? '/faculty/dashboard' : '/login'} replace />
-          }
-        />
+        {/* The audit log moved into Account settings; old links still work. */}
+        <Route path="/faculty/audit-log" element={<Navigate to="/faculty/account?section=audit" replace />} />
 
         <Route
           path="/faculty/registry"
@@ -487,7 +472,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <RegistryPage initialStatus={new URLSearchParams(location.search).get('status') || ''}
                     onOpenRevocation={no => navigate('/faculty/revocation?no=' + encodeURIComponent(no))} />
                 </main>
@@ -511,7 +496,7 @@ function AppContent() {
                   userName={user.name}
                   userTitle={user.title}
                 />
-                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 pb-16 fade-view" key={pageKey}>
                   <TemplatesPage />
                 </main>
               </>

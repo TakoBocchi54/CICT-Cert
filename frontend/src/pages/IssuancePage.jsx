@@ -32,7 +32,10 @@ function stepDone(seminar, index) {
 // Prepare has nothing left to create: every attendee has a certificate in some state (waiting on a wallet, issued, or
 // revoked, which Prepare never recreates; that needs a replacement), so Review is complete.
 const allPrepared = ({ attendanceCount, unpreparedCount }) => attendanceCount > 0 && unpreparedCount === 0;
-const firstOpenStep =seminar => [1, 2, 3].find(index => !stepDone(seminar, index)) ?? 3;
+const firstOpenStep = seminar => [1, 2, 3].find(index => !stepDone(seminar, index)) ?? 3;
+// Faculty without issuing permission run the attendance desk: Review and Issue are locked for them (the server refuses
+// prepare, name corrections and issuing anyway), so they never land on screens where every button is disabled.
+const ATTENDANCE_ONLY_LAST_STEP = 1;
 
 function stepHint(seminar, index) {
   if (!seminar) return index === 0 ? 'Pick a seminar' : '';
@@ -54,6 +57,10 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
   const [actionSlot, setActionSlot] = useState(null);
   const [csvOpen, setCsvOpen] = useState(null); // null: open only if a CSV review is in progress
   const heading = useRef(null);
+  // Unknown until /auth/faculty/me loads; nothing is locked meanwhile and the first step waits for it.
+  const attendanceOnly = faculty.data ? !faculty.data.canIssue : false;
+  const lastStep = attendanceOnly ? ATTENDANCE_ONLY_LAST_STEP : STEPS.length - 1;
+  const locked = index => index > lastStep;
   const seminars = useQuery({
     queryKey: ['faculty-seminars'],
     queryFn: () => api('/api/faculty/seminars'),
@@ -64,8 +71,9 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
   });
   const selected = seminars.data?.find(seminar => seminar.seminarID === selectedId);
   // Open each seminar at its first unfinished step, once; after that the faculty member drives navigation.
-  if (step === null && seminars.data) setStep(selected ? firstOpenStep(selected) : 0);
-  const current = step ?? 0;
+  if (step === null && seminars.data && (faculty.data || faculty.isError)) setStep(selected ? Math.min(firstOpenStep(selected), lastStep) : 0);
+  // Also covers permission being removed while the page is open.
+  const current = Math.min(step ?? 0, lastStep);
   const csvVisible = !!selected && (csvOpen ?? hasCsvDraft(selected.seminarID));
 
   // Moving between steps focuses the heading: screen readers announce the new step, and on phones the page
@@ -115,24 +123,26 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
             <ol className="grid grid-cols-4 gap-1 lg:grid-cols-1">
               {STEPS.map((name, index) => {
                 const done = selected && index !== current && stepDone(selected, index);
+                const isLocked = locked(index);
                 const active = index === current;
                 return (
                   <li key={name} className="relative">
                     {/* Connector to the next step (desktop rail only); green once this step is finished. */}
                     {index < STEPS.length - 1 && <span aria-hidden="true"
                       className={'absolute left-[33px] top-[57px] -bottom-[13px] hidden w-0.5 rounded-full lg:block ' + (selected && stepDone(selected, index) ?'bg-verified/60' : 'bg-[var(--line)]')} />}
-                    <button type="button" disabled={index > 0 && !selected} aria-current={active ? 'step' : undefined}
-                      onClick={() => goTo(index)} title={stepHint(selected, index) || undefined}
+                    <button type="button" disabled={(index > 0 && !selected) || isLocked} aria-current={active ? 'step' : undefined}
+                      onClick={() => goTo(index)} title={isLocked ? 'Needs issuing permission' : stepHint(selected, index) || undefined}
                       className={'relative w-full flex flex-col lg:flex-row items-center gap-2 lg:gap-4 p-2 lg:p-3 rounded-2xl border text-center lg:text-left transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest '
                         + (active ? 'bg-paper-2 border-[var(--line)]' : 'border-transparent hover:bg-paper-2/70 disabled:hover:bg-transparent')
                         + ' disabled:cursor-not-allowed disabled:opacity-40'}>
                       <span className={'w-10 h-10 rounded-full flex items-center justify-center font-serif text-lg shrink-0 transition-colors '
                         + (done ? 'bg-verified text-white' : active ? 'bg-forest text-white shadow-[0_6px_14px_-8px_rgba(14,59,44,.8)]' : 'border border-[var(--line)] bg-paper text-ink-muted')}>
-                        {done ? <><i className="ph-bold ph-check text-base" aria-hidden="true"></i><span className="sr-only">Done:</span></> : index + 1}
+                        {isLocked ? <><i className="ph-bold ph-lock-simple text-base" aria-hidden="true"></i><span className="sr-only">Locked:</span></>
+                          : done ? <><i className="ph-bold ph-check text-base" aria-hidden="true"></i><span className="sr-only">Done:</span></> : index + 1}
                       </span>
                       <span className="min-w-0">
                         <span className={'block font-semibold text-xs lg:text-sm ' + (active || done ? 'text-ink' : 'text-ink-muted')}>{name}</span>
-                        <span className="hidden lg:block text-xs text-ink-muted truncate">{stepHint(selected, index)}</span>
+                        <span className="hidden lg:block text-xs text-ink-muted truncate">{isLocked ? 'Needs issuing permission' : stepHint(selected, index)}</span>
                       </span>
                     </button>
                   </li>
@@ -158,9 +168,11 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
                   className="mt-8 rounded-2xl border border-[var(--line)] bg-paper p-5 md:p-6">
                   <h3 id="attendance-csv-title" className="mb-3 font-serif text-xl font-medium">Upload attendance CSV</h3>
                   <AttendanceImport seminarID={selected.seminarID} attendanceCount={selected.attendanceCount}
-                    onSaved={result => { setAttendanceResult(result); goTo(2); }}
-                    actionSlot={current === 1 ? actionSlot : null} onContinue={() => goTo(2)} onFile={() => setCsvOpen(true)} />
+                    onSaved={result => { setAttendanceResult(result); if (!attendanceOnly) goTo(2); }}
+                    actionSlot={current === 1 ? actionSlot : null} onContinue={attendanceOnly ? null : () => goTo(2)} onFile={() => setCsvOpen(true)} />
                 </section>
+                {attendanceOnly && attendanceResult && <p role="status" className="mt-6 rounded-xl bg-verified-bg p-4 text-sm text-verified">
+                  Attendance saved: {attendanceResult.attendance.attended} attended, {attendanceResult.attendance.markedAbsent} marked absent.</p>}
               </section>
               <section hidden={current !== 2} className="flex-1 fade-view">
                 {attendanceResult && <div role="status" className="mb-6 rounded-xl bg-verified-bg p-4 text-sm text-verified">

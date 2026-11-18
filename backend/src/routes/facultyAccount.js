@@ -13,9 +13,9 @@ router.use("/faculty/account", (_req, res, next) => {
 
 router.get("/faculty/account", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT f."facultyID", f."firstName", f."lastName", f."canIssue", u."email"
+    `SELECT f."facultyID", f."firstName", f."lastName", f."canIssue", f."temporaryPassword", u."email"
      FROM cict_faculty f JOIN users u ON u."userID" = f."userID"
-     WHERE f."facultyID" = $1 AND u."userID" = $2 AND u."role" = 'FACULTY'`,
+     WHERE f."facultyID" = $1 AND u."userID" = $2 AND u."role" = 'FACULTY' AND f."deactivatedAt" IS NULL`,
     [req.faculty.facultyID, req.faculty.userID]
   );
   if (!rows[0]) return res.status(401).json({ error: "Account not found" });
@@ -31,8 +31,8 @@ router.patch("/faculty/account", async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE cict_faculty f SET "firstName" = $1, "lastName" = $2
      FROM users u WHERE f."facultyID" = $3 AND f."userID" = $4
-     AND u."userID" = f."userID" AND u."role" = 'FACULTY'
-     RETURNING f."facultyID", f."firstName", f."lastName", f."canIssue", u."email"`,
+     AND u."userID" = f."userID" AND u."role" = 'FACULTY' AND f."deactivatedAt" IS NULL
+     RETURNING f."facultyID", f."firstName", f."lastName", f."canIssue", f."temporaryPassword", u."email"`,
     [firstName, lastName, req.faculty.facultyID, req.faculty.userID]
   );
   if (!rows[0]) return res.status(401).json({ error: "Account not found" });
@@ -65,7 +65,7 @@ router.post("/faculty/account/password", passwordLimiter, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT u."passwordHash" FROM users u
      JOIN cict_faculty f ON f."userID" = u."userID"
-     WHERE u."userID" = $1 AND f."facultyID" = $2 AND u."role" = 'FACULTY'`,
+     WHERE u."userID" = $1 AND f."facultyID" = $2 AND u."role" = 'FACULTY' AND f."deactivatedAt" IS NULL`,
     [req.faculty.userID, req.faculty.facultyID]
   );
   if (!rows[0]) return res.status(401).json({ error: "Account not found" });
@@ -74,8 +74,9 @@ router.post("/faculty/account/password", passwordLimiter, async (req, res) => {
   }
   const hash = await bcrypt.hash(newPassword, 12);
   const result = await pool.query(
-    `UPDATE users SET "passwordHash" = $1
-     WHERE "userID" = $2 AND "passwordHash" = $3 AND "role" = 'FACULTY'`,
+    `WITH changed AS (UPDATE users SET "passwordHash" = $1
+       WHERE "userID" = $2 AND "passwordHash" = $3 AND "role" = 'FACULTY' RETURNING "userID")
+     UPDATE cict_faculty SET "temporaryPassword" = false WHERE "userID" IN (SELECT "userID" FROM changed)`,
     [hash, req.faculty.userID, rows[0].passwordHash]
   );
   if (!result.rowCount) return res.status(409).json({ error: "Your password changed during this request. Try again with your current password." });

@@ -2,6 +2,7 @@ import "dotenv/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { formatCertificateNo } from "../utils/certificateNumber.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { smtRoot } from "../utils/merkle.js";
@@ -197,9 +198,9 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     assert.deepEqual({ ...row }, { ...(await db.query(`SELECT "seminarID","studentID" FROM certificate WHERE "certificateID"=$1`, [original.id])).rows[0],
       studentWalletID: 1, authorizedBy: 1, certificateHash: null });
     assert.equal(chain.sendCount, sends, "preparing a replacement sends no transaction");
-    assert.deepEqual((await request(String(original.no))).data.replacement, { certificateNo: created.data.certificateNo, status: "PENDING" });
+    assert.deepEqual((await request(String(original.no))).data.replacement, { certificateNo: created.data.certificateNo, status: "PENDING", seminarDate: created.data.seminarDate });
     assert.equal((await registryRow()).replaced, true, "the registry flags a revoked certificate that has a replacement");
-    assert.match((await replace(original)).data.error, new RegExp(`No\\. ${created.data.certificateNo}`));
+    assert.match((await replace(original)).data.error, new RegExp(formatCertificateNo(created.data.certificateNo, created.data.seminarDate)));
     const absent = await issuedCertificate();
     await db.query(`UPDATE certificate SET status='REVOKED',"revokedAt"=now() WHERE "certificateID"=$1;`, [absent.id]);
     await db.query(`UPDATE seminar_registration SET attended=false WHERE ("seminarID","studentID") = (SELECT "seminarID","studentID" FROM certificate WHERE "certificateID"=$1)`, [absent.id]);
@@ -212,7 +213,7 @@ test("faculty revocation with PostgreSQL and a local Amoy RPC fixture", { skip }
     const [issued, revoked] = ["ISSUED", "REVOKED"].map(async s => Number((await db.query(`SELECT count(*) FROM certificate WHERE status=$1`, [s])).rows[0].count));
     assert.equal(status, 200); assert.equal(data.issuedCount, await issued); assert.equal(data.revokedCount, await revoked);
     assert.ok(data.recentIssued.length <= 4 && data.recentRevoked.length <= 3 && data.recentRevoked.length > 0);
-    assert.deepEqual(Object.keys(data.recentRevoked[0]).sort(), ["at", "certificateNo", "recipientName", "seminarTitle"]);
+    assert.deepEqual(Object.keys(data.recentRevoked[0]).sort(), ["at", "certificateNo", "recipientName", "seminarDate", "seminarTitle"]);
   });
 
   await t.test("issuer wallet reports the contract issuer's POL balance, or 503 when the RPC is down", async () => {

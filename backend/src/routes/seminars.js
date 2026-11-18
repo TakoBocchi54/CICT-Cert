@@ -370,7 +370,7 @@ router.get("/faculty/seminars/:seminarID/certificates", async (req, res) => {
   const seminar = await pool.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1`, [req.params.seminarID]);
   if (!seminar.rowCount) return res.status(404).json({ error: "Seminar not found." });
   const { rows } = await pool.query(
-    `SELECT c."certificateID", c."certificateNo", c."recipientName", c."status",
+    `SELECT c."certificateID", c."certificateNo", c."recipientName", c."status", to_char(c."seminarDate", 'YYYY-MM-DD') AS "seminarDate",
             r."attended", u."email", (w."studentWalletID" IS NOT NULL) AS "walletConnected",
             b."transactionStatus", b."transactionHash", b."tokenID", c."certificateHash"
      FROM certificate c JOIN seminar_registration r USING ("seminarID", "studentID")

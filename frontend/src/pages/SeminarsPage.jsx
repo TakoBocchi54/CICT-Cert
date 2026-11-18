@@ -6,6 +6,7 @@ import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { Btn } from '../components/design-system';
 import { RegistrationLink } from '../components/Registrants';
 import NewSeminarDialog from '../components/NewSeminarDialog';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const day = iso => new Date(iso + 'T00:00:00');
 const matchSeminars = (list, search) => {
@@ -44,7 +45,7 @@ const ScrollTable = ({ caption, head, children }) => (
   <div className="max-h-[420px] overflow-auto">
     <table className="w-full min-w-[640px] text-left text-sm">
       <caption className="sr-only">{caption}</caption>
-      <thead className="sticky top-0 z-10 bg-paper-2">
+      <thead className="sticky top-0 z-10 bg-table-head shadow-[inset_0_-1px_0_var(--line)]">
         <tr>{head.map(h => <th key={h} scope="col" className="eyebrow px-4 py-3 font-semibold">{h}</th>)}</tr>
       </thead>
       <tbody className="divide-y divide-[var(--line)]">{children}</tbody>
@@ -194,14 +195,14 @@ export default function SeminarsPage() {
                           const [tone, icon] = progressLook(row);
                           return (
                             <tr key={row.certificateID} className="transition-colors hover:bg-paper">
-                              <td className="px-4 py-3 font-mono text-xs">{row.certificateNo}</td>
+                              <td className="px-4 py-3 font-mono text-xs">{formatCertificateNo(row.certificateNo, row.seminarDate)}</td>
                               <td className="px-4 py-3"><span className="font-medium">{row.recipientName}</span>
                                 <span className="block break-all text-xs text-ink-soft">{row.email}</span></td>
                               <td className="px-4 py-3"><Badge tone={tone} icon={icon}>{certificateProgress(row)}</Badge></td>
                               <td className="px-4 py-3 text-right">
                                 {['ISSUED', 'REVOKED'].includes(row.status) && row.certificateHash && (
                                   <a href={certificateVerificationUrl(row.certificateHash, window.location.origin)} target="_blank" rel="noreferrer"
-                                    className="btn btn-line btn-sm" aria-label={`Verify certificate ${row.certificateNo} (opens in a new tab)`}>
+                                    className="btn btn-line btn-sm" aria-label={`Verify certificate ${formatCertificateNo(row.certificateNo, row.seminarDate)} (opens in a new tab)`}>
                                     Verify<i className="ph-bold ph-arrow-square-out" aria-hidden="true"></i></a>
                                 )}
                               </td>

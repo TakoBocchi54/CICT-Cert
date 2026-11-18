@@ -30,7 +30,7 @@ router.post("/auth/faculty/login", loginLimiter, async (req, res) => {
             f."facultyID", f."firstName", f."lastName", f."canIssue"
      FROM users u
      JOIN cict_faculty f ON f."userID" = u."userID"
-     WHERE LOWER(u."email") = $1 AND u."role" = 'FACULTY'`,
+     WHERE LOWER(u."email") = $1 AND u."role" = 'FACULTY' AND f."deactivatedAt" IS NULL`,
     [email]
   );
 
@@ -57,7 +57,7 @@ router.post("/auth/faculty/login", loginLimiter, async (req, res) => {
 router.get("/auth/faculty/me", requireFaculty, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT "facultyID", "firstName", "lastName", "canIssue"
-     FROM cict_faculty WHERE "facultyID" = $1`,
+     FROM cict_faculty WHERE "facultyID" = $1 AND "deactivatedAt" IS NULL`,
     [req.faculty.facultyID]
   );
   if (rows.length === 0) return res.status(401).json({ error: "Account not found" });

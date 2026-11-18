@@ -23,6 +23,7 @@ if (!legacyTimezone) {
       "010_notifications.sql",
       "011_student_contact_number.sql",
       "012_audit_log.sql",
+      "013_faculty_management.sql",
     ]) {
       const sql = await readFile(new URL(`../sql/migrations/${name}`, import.meta.url), "utf8");
       await client.query(sql);

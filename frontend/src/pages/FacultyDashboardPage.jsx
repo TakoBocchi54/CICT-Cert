@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Seal, Btn, Rosette } from '../components/design-system';
 import { api } from '../lib/api';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 const shortDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -180,7 +181,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="text-sm text-ink-soft">{shortDate(c.at)}</div>
-                      <div className="font-mono text-xs text-ink-muted">No. {c.certificateNo}</div>
+                      <div className="font-mono text-xs text-ink-muted">{formatCertificateNo(c.certificateNo, c.seminarDate)}</div>
                     </div>
                   </li>
                 ))}
@@ -211,7 +212,7 @@ export default function FacultyDashboardPage({ onIssueClick, onNavigateRevocatio
                 {revoked.map(c => (
                   <li key={c.certificateNo} className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="min-w-0 truncate font-medium">{c.recipientName}</span>
-                    <span className="shrink-0 font-mono text-xs text-ink-muted">No. {c.certificateNo}</span>
+                    <span className="shrink-0 font-mono text-xs text-ink-muted">{formatCertificateNo(c.certificateNo, c.seminarDate)}</span>
                   </li>
                 ))}
               </ul>

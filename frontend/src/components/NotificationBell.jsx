@@ -68,10 +68,10 @@ export default function NotificationBell() {
       <span className="sr-only" aria-live="polite">{unread ? `${unread} unread ${unread === 1 ? 'notification' : 'notifications'}` : ''}</span>
       <button type="button" onClick={toggle} aria-expanded={open} aria-controls="notification-panel"
         aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-        className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-ink-soft transition-colors hover:bg-black/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest">
-        <i className={'text-xl ' + (unread ? 'ph-fill ph-bell-ringing text-forest' : 'ph-bold ph-bell')} aria-hidden="true"></i>
+        className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+        <i className={'text-xl ' + (unread ? 'ph-fill ph-bell-ringing text-white' : 'ph-bold ph-bell')} aria-hidden="true"></i>
         {unread > 0 && <span aria-hidden="true"
-          className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-revoked px-1 text-[11px] font-bold leading-none text-white tabular-nums ring-2 ring-white">
+          className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-revoked px-1 text-[11px] font-bold leading-none text-white tabular-nums ring-2 ring-forest">
           {unread > 9 ? '9+' : unread}</span>}
       </button>
 

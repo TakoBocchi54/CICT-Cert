@@ -57,6 +57,9 @@ router.get("/certificates/verify/:certHash", async (req, res) => {
             // The chain proves that a certificate is revoked, not when: the time is the revoking block's, saved at finality.
             revokedAt: revokedAt ? String(Math.floor(revokedAt.getTime() / 1000)) : "0",
             issuerAddress: context.issuerAddress,
+            // For the page's Polygonscan links, so a verifier can check the token and its minting transaction there.
+            contractAddress: context.contractAddress,
+            transactionHash: record.transactionHash ?? null,
             certificate,
             detailsStatus,
         });

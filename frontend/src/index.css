@@ -10,9 +10,10 @@
   --color-paper: #fbf9f4;
   --color-paper-2: #f3efe6;
   --color-paper-3: #e9e3d3;
+  --color-table-head: #e8efe9;
   --color-ink: #16231d;
   --color-ink-soft: #3a4a41;
-  --color-ink-muted: #6a7a70;
+  --color-ink-muted: #5a6a60;
   --color-forest: #0e3b2c;
   --color-forest-700: #145240;
   --color-forest-600: #1b6a53;
@@ -28,8 +29,10 @@
   --paper: #fbf9f4;
   --paper2: #f3efe6;
   --sheet: #fffefb;
+  /* Page background, a step darker than --paper so white .sheet cards stand out. */
+  --canvas: #efebe1;
   --ink: #16231d;
-  --muted: #6a7a70;
+  --muted: #5a6a60;
   --line: #e2dccd;
   --forest: #0e3b2c;
   --verified: #157347;
@@ -43,7 +46,7 @@ html {
 }
 
 body {
-  background-color: var(--paper);
+  background-color: var(--canvas);
   color: var(--ink);
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -69,7 +72,7 @@ body {
 /* Surfaces */
 .sheet {
   background: var(--sheet);
-  border: 1px solid var(--line);
+  border: 1px solid #d9d2c1;
   border-radius: 18px;
   box-shadow: 0 1px 0 #fff inset, 0 1px 2px rgba(22, 35, 29, 0.04), 0 12px 30px -18px rgba(22, 35, 29, 0.18);
 }
@@ -80,14 +83,6 @@ body {
   border-radius: 18px;
   position: relative;
   overflow: hidden;
-}
-
-.glass {
-  background: rgba(251, 249, 244, 0.96);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(22, 35, 29, 0.08);
-  box-shadow: 0 8px 30px -14px rgba(22, 35, 29, 0.25);
 }
 
 /* Small label for form fields, table heads and data terms. Sentence case, readable size. */

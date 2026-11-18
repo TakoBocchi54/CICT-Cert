@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Seal, Pill, Btn } from '../components/design-system';
 import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const MAX_REASON = 500;
 const fmt = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
@@ -120,7 +121,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
         <Note icon="ph-info">Pick a certificate in the Registry and choose Revoke or Details to open it here.</Note>
       ) : lookup.isPending ? (
         <div role="status" className="sheet flex items-center justify-center gap-3 p-12 text-sm text-ink-soft">
-          <i className="ph-bold ph-circle-notch animate-spin text-lg" aria-hidden="true"></i>Looking up certificate No. {certificateNo}...
+          <i className="ph-bold ph-circle-notch animate-spin text-lg" aria-hidden="true"></i>Looking up the certificate...
         </div>
       ) : lookup.error ? (
         <Note tone="danger" icon="ph-warning-circle" role="alert">{lookup.error.message}</Note>
@@ -135,7 +136,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
 
           <div className="space-y-5 p-6">
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2.5 text-sm">
-              <dt className="text-ink-muted">Certificate no.</dt><dd className="font-mono">{found.certificateNo}</dd>
+              <dt className="text-ink-muted">Certificate no.</dt><dd className="font-mono">{formatCertificateNo(found.certificateNo, found.seminarDate)}</dd>
               {found.tokenID && <><dt className="text-ink-muted">Token ID</dt><dd className="font-mono">#{found.tokenID}</dd></>}
               <dt className="text-ink-muted">Seminar date</dt><dd>{fmt(found.seminarDate)}</dd>
               {found.walletAddress && <><dt className="text-ink-muted">Recipient wallet</dt><dd className="break-all font-mono text-xs leading-5">{found.walletAddress}</dd></>}
@@ -174,13 +175,13 @@ export default function RevocationPage({ initialNo = '', onBack }) {
             )}
             {found.status === 'REVOKED' && found.replacement && (
               <Note icon="ph-arrows-clockwise">
-                <p>Replaced by certificate No. {found.replacement.certificateNo} ({found.replacement.status.toLowerCase()}).</p>
-                <Btn variant="line" size="sm" className="mt-3" onClick={() => openCertificate(found.replacement.certificateNo)}>Open No. {found.replacement.certificateNo}</Btn>
+                <p>Replaced by certificate {formatCertificateNo(found.replacement.certificateNo, found.replacement.seminarDate)} ({found.replacement.status.toLowerCase()}).</p>
+                <Btn variant="line" size="sm" className="mt-3" onClick={() => openCertificate(found.replacement.certificateNo)}>Open {formatCertificateNo(found.replacement.certificateNo, found.replacement.seminarDate)}</Btn>
               </Note>
             )}
             {replace.data && (
               <Note tone="success" icon="ph-check-circle" role="status">
-                Replacement certificate No. {replace.data.certificateNo} prepared. Issue it from the seminar's Issue step; it goes out in a new batch.
+                Replacement certificate {formatCertificateNo(replace.data.certificateNo, replace.data.seminarDate)} prepared. Issue it from the seminar's Issue step; it goes out in a new batch.
               </Note>
             )}
             {outcome && !failure && <Note tone={outcome.status === 'REVOKED' ? 'success' : outcome.transactionStatus === 'FAILED' ? 'danger' : 'pending'}
@@ -218,7 +219,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
           <p className="mt-2 break-words text-center text-sm text-ink-soft">
             {found.recipientName} · {found.seminarTitle} · {fmt(found.seminarDate)}
             <br />
-            <span className="font-mono text-xs">No. {found.certificateNo} · Token #{found.tokenID}</span>
+            <span className="font-mono text-xs">{formatCertificateNo(found.certificateNo, found.seminarDate)} · Token #{found.tokenID}</span>
           </p>
           <div className="my-5">
             <Note tone="danger" icon="ph-warning">
@@ -245,7 +246,7 @@ export default function RevocationPage({ initialNo = '', onBack }) {
         <Modal labelledBy="replace-title" busy={busy} onClose={() => setFacts(null)}>
           <h2 id="replace-title" className="pr-10 font-serif text-3xl font-medium">Prepare replacement</h2>
           <p className="mt-2 mb-5 text-sm text-ink-soft">
-            Replaces revoked certificate No. {found.certificateNo}. Correct the details below; they are saved only on the new certificate, which gets a new number.
+            Replaces revoked certificate {formatCertificateNo(found.certificateNo, found.seminarDate)}. Correct the details below; they are saved only on the new certificate, which gets a new number.
             It is issued in a new batch from the seminar's Issue step.
           </p>
           <form className="space-y-4" onSubmit={e => { e.preventDefault(); if (!busy && factsComplete) replace.mutate(); }}>

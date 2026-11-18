@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { Btn } from '../components/design-system';
+import { Btn } from './design-system';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const PAGE = 50;
 
@@ -39,21 +40,34 @@ const ACTIONS = [
   [/^POST \/faculty\/certificate-templates$/, 'created a certificate design', 'ph-palette', 'plain'],
   [/^DELETE \/faculty\/certificate-templates\/:id$/, 'deleted a certificate design', 'ph-trash', 'danger'],
   [/\/certificate-templates\//, 'edited a certificate design', 'ph-paint-brush', 'plain'],
+  [/^POST \/faculty\/members$/, 'added a faculty account', 'ph-user-plus', 'plain'],
+  [/\/members\/:id\/reset-password$/, "reset a faculty member's password", 'ph-key', 'wait'],
+  [/^PATCH \/faculty\/members\/:id$/, 'changed a faculty account', 'ph-user-gear', 'wait'],
 ];
-const describe = action => {
+const describe = (action, details = {}) => {
+  // One route both switches accounts off/on and changes permission; the saved fields say which.
+  if (/^PATCH \/faculty\/members\/:id$/.test(action)) {
+    if (details.active === false) return { verb: 'deactivated a faculty account', icon: 'ph-user-minus', tone: 'danger' };
+    if (details.active === true) return { verb: 'reactivated a faculty account', icon: 'ph-user-check', tone: 'good' };
+    if (details.canIssue === true) return { verb: 'gave a faculty member issuing permission', icon: 'ph-seal-check', tone: 'wait' };
+    if (details.canIssue === false) return { verb: "removed a faculty member's issuing permission", icon: 'ph-lock-simple', tone: 'danger' };
+  }
   const match = ACTIONS.find(([pattern]) => pattern.test(action));
   return match ? { verb: match[1], icon: match[2], tone: match[3] } : { verb: action, icon: 'ph-dot-outline', tone: 'plain' };
 };
 
 // Names the numbers in the URL by the path segment before each one, e.g. /seminars/5/registrations/12.
 const ID_NAMES = { seminars: 'Seminar', registrations: 'Student', students: 'Student', 'certificate-templates': 'Design', signatures: 'Signature' };
-function idChips(action, ids) {
+// certificateDates (from the server) gives each mentioned certificate number its seminar date for the shown format.
+function idChips({ action, ids, targetName, targetEmail, certificateDates = {} }) {
   const segments = action.split(' ')[1]?.split('/') ?? [];
   const names = segments.flatMap((segment, index) => segment === ':id' ? [segments[index - 1]] : []);
-  return ids.map((id, index) => {
+  return ids.flatMap((id, index) => {
     const noun = names[index];
     // /faculty/certificates/:id is a certificate number; the nested seminar route uses the internal certificate ID.
-    if (noun === 'certificates') return index === 0 ? `Certificate No. ${id}` : `Certificate ID ${id}`;
+    if (noun === 'certificates') return index === 0 ? formatCertificateNo(id, certificateDates[id]) : `Certificate ID ${id}`;
+    // The changed faculty account, by name (the server looks it up) rather than its internal ID.
+    if (noun === 'members') return targetName ? [`Account: ${targetName}`, targetEmail && `Email: ${targetEmail}`].filter(Boolean) : 'Removed account';
     return `${ID_NAMES[noun] || 'Record'} #${id}`;
   });
 }
@@ -61,9 +75,12 @@ function idChips(action, ids) {
 const fmtDay = date => date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 const fmtDateOnly = value => /^\d{4}-\d{2}-\d{2}$/.test(value) ? fmtDay(new Date(value + 'T00:00:00')) : value;
 // The reason is shown as a quote below the chips, not as a chip.
-function detailChips({ certificateNos, recipientName, attended, seminarTitle, seminarDate, venue, registrationClosesAt, name }) {
+function detailChips({ certificateNos, recipientName, attended, seminarTitle, seminarDate, venue, registrationClosesAt, name, firstName, lastName, email, canIssue }, certificateDates = {}) {
   return [
-    certificateNos?.length && `Certificate No. ${certificateNos.join(', ')}`,
+    (firstName || lastName) && `Name: ${[firstName, lastName].filter(Boolean).join(' ')}`,
+    email && `Email: ${email}`,
+    canIssue !== undefined && (canIssue ? 'Can issue' : 'Attendance & records'),
+    certificateNos?.length && certificateNos.map(no => formatCertificateNo(no, certificateDates[no])).join(', '),
     attended !== undefined && (attended ? 'Marked attended' : 'Marked absent'),
     recipientName && `Name: ${recipientName}`,
     seminarTitle && `Title: ${seminarTitle}`,
@@ -95,8 +112,8 @@ function byDay(rows) {
 
 function Entry({ row }) {
   const at = new Date(row.at);
-  const { verb, icon, tone } = describe(row.action);
-  const chips = [...idChips(row.action, row.ids), ...detailChips(row.details)];
+  const { verb, icon, tone } = describe(row.action, row.details);
+  const chips = [...idChips(row), ...detailChips(row.details, row.certificateDates)];
   return (
     <li className="flex gap-4 px-5 py-4 sm:px-6 hover:bg-paper">
       <span className={'mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ' + TONES[tone]} aria-hidden="true">
@@ -117,7 +134,6 @@ function Entry({ row }) {
         </ul>}
         {row.details?.reason && <p className="mt-2.5 border-l-2 border-[var(--line)] pl-3 text-sm italic text-ink-soft [overflow-wrap:anywhere]">
           <span className="sr-only">Reason: </span>“{row.details.reason}”</p>}
-        <p className="mt-2 font-mono text-[11px] text-ink-muted/80 [overflow-wrap:anywhere]">{row.action}</p>
       </div>
     </li>
   );
@@ -138,7 +154,8 @@ function Skeleton() {
 }
 
 // Every faculty change, newest first. Only faculty with issuance permission can open it (server-enforced).
-export default function AuditLogPage() {
+// Account settings → Audit log, for faculty with issuing permission (the server enforces it too).
+export default function AuditLog() {
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
@@ -160,19 +177,9 @@ export default function AuditLogPage() {
   const filtered = q || kind;
 
   return (
-    <div className="pb-16 md:pb-24">
-      <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <h1 className="font-serif text-5xl md:text-6xl font-medium leading-[1.02]">Audit log</h1>
-          <p className="mt-4 max-w-xl text-lg text-ink-soft">Every change faculty made, who made it and when.</p>
-        </div>
-        <p className="flex items-center gap-2 rounded-full border border-[var(--line)] bg-paper px-4 py-2 text-sm text-ink-soft">
-          <i className="ph-bold ph-lock-simple text-forest" aria-hidden="true"></i>Entries can't be edited or deleted
-        </p>
-      </div>
-
+    <div>
       <section className="sheet overflow-hidden" aria-labelledby="audit-title">
-        <h2 id="audit-title" className="sr-only">Entries</h2>
+        <h2 id="audit-title" className="sr-only">Audit log entries</h2>
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] bg-paper p-5">
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by type">
             {FILTERS.map(([value, label]) => (

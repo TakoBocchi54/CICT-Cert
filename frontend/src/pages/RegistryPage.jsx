@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { Btn, Pill } from '../components/design-system';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const FILTERS = [['', 'All'], ['ISSUED', 'Verified'], ['REVOKED', 'Revoked']];
 const fmtDate = value => new Date(value).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
@@ -121,7 +122,7 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
           <div className="h-[560px] overflow-auto">
             <table className="w-full min-w-[860px] text-left text-sm">
               <caption className="sr-only">Issued and revoked certificates</caption>
-              <thead className="sticky top-0 z-10 bg-paper-2"><tr className="eyebrow">
+              <thead className="sticky top-0 z-10 bg-table-head shadow-[inset_0_-1px_0_var(--line)]"><tr className="eyebrow">
                 {canRevoke && <th scope="col" className="w-10 pl-6 py-3.5">
                   <input type="checkbox" aria-label="Select every issued certificate shown" disabled={!issued.length || revoke.isPending} checked={allSelected}
                     onChange={() => setSelected(allSelected ? [] : issued)} />
@@ -134,17 +135,17 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
                 {certificates.data.map(cert => (
                   <tr key={cert.certificateNo} className="border-t border-[var(--line)] hover:bg-paper">
                     {canRevoke && <td className="pl-6 py-4">
-                      {cert.status === 'ISSUED' && <input type="checkbox" aria-label={`Select certificate ${cert.certificateNo} for revocation`}
+                      {cert.status === 'ISSUED' && <input type="checkbox" aria-label={`Select certificate ${formatCertificateNo(cert.certificateNo, cert.seminarDate)} for revocation`}
                         disabled={revoke.isPending} checked={selected.includes(cert.certificateNo)} onChange={() => toggle(cert.certificateNo)} />}
                     </td>}
                     <td className="px-6 py-4"><div className="font-medium">{cert.recipientName}</div><div className="break-all text-xs text-ink-muted">{cert.email}</div></td>
                     <td className="max-w-[260px] p-3"><div className="text-ink-soft">{cert.seminarTitle}</div><div className="text-xs text-ink-muted">{fmtDate(cert.seminarDate + 'T00:00:00')}</div></td>
-                    <td className="p-3 font-mono text-xs text-ink-muted">{cert.certificateNo}</td>
+                    <td className="p-3 font-mono text-xs text-ink-muted">{formatCertificateNo(cert.certificateNo, cert.seminarDate)}</td>
                     <td className="p-3 text-ink-soft">{fmtDate(cert.issuedAt)}</td>
                     <td className="p-3"><Pill status={cert.status === 'ISSUED' ? 'Verified' : 'Revoked'} /></td>
                     <td className="whitespace-nowrap px-6 py-3 text-right">
                       <a href={certificateVerificationUrl(cert.certificateHash, window.location.origin)} target="_blank" rel="noreferrer"
-                        className="btn btn-ghost btn-sm" aria-label={`View certificate ${cert.certificateNo} (opens in a new tab)`}>
+                        className="btn btn-ghost btn-sm" aria-label={`View certificate ${formatCertificateNo(cert.certificateNo, cert.seminarDate)} (opens in a new tab)`}>
                         View<i className="ph-bold ph-arrow-square-out" aria-hidden="true"></i></a>
                       {(() => {
                         // Revoke and Replace only for faculty who can issue; everyone else gets the read-only Details.
@@ -152,7 +153,7 @@ export default function RegistryPage({ initialStatus = '', onOpenRevocation }) {
                           : cert.status === 'REVOKED' && canRevoke && !cert.replaced ? ['Replace', 'ph-arrows-clockwise', '']
                           : ['Details', 'ph-file-text', ''];
                         return <Btn variant="ghost" size="sm" icon={icon} className={tone} onClick={() => onOpenRevocation(cert.certificateNo)}
-                          aria-label={`${label === 'Details' ? 'Details for' : label} certificate ${cert.certificateNo}`}>{label}</Btn>;
+                          aria-label={`${label === 'Details' ? 'Details for' : label} certificate ${formatCertificateNo(cert.certificateNo, cert.seminarDate)}`}>{label}</Btn>;
                       })()}
                     </td>
                   </tr>

@@ -44,7 +44,8 @@ router.get("/auth/me", async (req,res) => {
             JOIN cict_faculty f ON f."userID" = u."userID"
             WHERE u."userID" = $1
                 AND f."facultyID" = $2
-                AND u."role" = 'FACULTY'`,
+                AND u."role" = 'FACULTY'
+                AND f."deactivatedAt" IS NULL`,
             [session.userID, session.facultyID]
         );
     } else {

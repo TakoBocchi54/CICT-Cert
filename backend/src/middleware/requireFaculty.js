@@ -15,12 +15,12 @@ export async function requireFaculty(req, res, next) {
   }
 }
 
-// Use after requireFaculty to reject sessions whose faculty account no longer exists.
+// Use after requireFaculty to reject sessions whose faculty account no longer exists or was deactivated.
 export async function requireActiveFaculty(req, res, next) {
   res.set("Cache-Control", "no-store");
   const { rows } = await pool.query(
     `SELECT f."facultyID" FROM cict_faculty f JOIN users u ON u."userID" = f."userID"
-     WHERE f."facultyID" = $1 AND u."userID" = $2 AND u."role" = 'FACULTY'`,
+     WHERE f."facultyID" = $1 AND u."userID" = $2 AND u."role" = 'FACULTY' AND f."deactivatedAt" IS NULL`,
     [req.faculty.facultyID, req.faculty.userID],
   );
   if (!rows.length) return res.status(401).json({ error: "Faculty account not found." });

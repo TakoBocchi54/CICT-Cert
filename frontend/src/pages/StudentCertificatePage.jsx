@@ -4,6 +4,8 @@ import { Btn, Certificate, Seal } from '../components/design-system';
 import { api } from '../lib/api';
 import { certificateVerificationUrl } from '../lib/certificateVerificationUrl';
 import { saveBlob } from '../lib/saveBlob';
+import ShareCertificate from '../components/ShareCertificate';
+import { formatCertificateNo } from '../lib/certificateNumber';
 
 const STATUS_TEXT = {
   Verified: ['Valid and authentic', 'Issued on Polygon Amoy and confirmed in a finalized block.'],
@@ -24,7 +26,7 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
   // The proof file lets anyone check this certificate against its batch root on chain without this site.
   const proof = useMutation({
     mutationFn: async () => saveBlob(new Blob([JSON.stringify(await api(`/api/student/certificates/${cert.certificateID}/proof`), null, 2)],
-      { type: 'application/json' }), `CICT-Certificate-${cert.id}-proof.json`),
+      { type: 'application/json' }), `Certificate-${formatCertificateNo(cert.id, cert.iso)}-proof.json`),
   });
 
   const back = (
@@ -40,26 +42,27 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
         {back}
         <div className="sheet p-8">
           <h1 className="font-serif text-3xl font-medium">Certificate not found</h1>
-          <p className="mt-2 text-sm text-ink-soft">There is no issued certificate #{certificateNo} in your collection.</p>
+          <p className="mt-2 text-sm text-ink-soft">This certificate is not in your collection, or it has not been issued yet.</p>
         </div>
       </div>
     );
   }
 
   const [title, description] = STATUS_TEXT[cert.status];
+  const verificationUrl = certificateVerificationUrl(cert.hash, window.location.origin);
 
   return (
     <div>
       {back}
-      <h1 className="sr-only">Certificate #{cert.id}: {cert.seminar}</h1>
+      <h1 className="sr-only">Certificate {formatCertificateNo(cert.id, cert.iso)}: {cert.seminar}</h1>
       <div className="grid items-start gap-8 lg:grid-cols-12">
         <div className="lg:col-span-8">
-          <Certificate cert={cert} tilt={false} verificationUrl={certificateVerificationUrl(cert.hash, window.location.origin)} />
+          <Certificate cert={cert} tilt={false} verificationUrl={verificationUrl} />
           <div className="mt-5 flex flex-wrap gap-3">
             <Btn icon="ph-download-simple" onClick={() => onDownload(cert)}>Download PDF</Btn>
-            <Btn variant="line" icon="ph-tree-structure" disabled={proof.isPending} onClick={() => proof.mutate()}>{proof.isPending ? 'Preparing proof...' : 'Download Merkle proof (JSON)'}</Btn>
+            {/* A revoked certificate no longer verifies as valid, so there is nothing to share. */}
+            {cert.status === 'Verified' && <ShareCertificate cert={cert} verificationUrl={verificationUrl} />}
           </div>
-          {proof.error && <p role="alert" className="mt-3 text-sm text-revoked">{proof.error.message}</p>}
         </div>
         <aside className="space-y-6 lg:col-span-4">
           <section className="sheet p-7 text-center">
@@ -70,7 +73,7 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
           <section className="sheet p-6">
             <h2 className="eyebrow mb-1">Blockchain record</h2>
             <dl>
-              <Row label="Certificate no." mono>{cert.id}</Row>
+              <Row label="Certificate no." mono>{formatCertificateNo(cert.id, cert.iso)}</Row>
               <Row label="Network">Polygon Amoy testnet</Row>
               <Row label="Token standard">ERC-5484 (soulbound)</Row>
               {cert.tokenID && <Row label="Token ID" mono>{cert.tokenID}</Row>}
@@ -82,6 +85,14 @@ export default function StudentCertificatePage({ certificates, onBack, onDownloa
                 className="block break-all rounded-lg border border-[var(--line)] bg-paper-2 p-3 font-mono text-[11px] text-forest underline"
                 aria-label="View the issuing transaction on Polygonscan (opens in a new tab)">{cert.transactionHash}</a>
             </div>}
+            <div className="hair mt-4 pt-4">
+              <div className="eyebrow mb-1">Independent verification</div>
+              <p className="text-xs text-ink-soft">The Merkle proof file lets anyone check this certificate against the contract without using this site.</p>
+              <Btn variant="line" size="sm" icon="ph-tree-structure" className="mt-3" disabled={proof.isPending} onClick={() => proof.mutate()}>
+                {proof.isPending ? 'Preparing proof...' : 'Download Merkle proof'}
+              </Btn>
+              {proof.error && <p role="alert" className="mt-2 text-xs text-revoked">{proof.error.message}</p>}
+            </div>
           </section>
         </aside>
       </div>

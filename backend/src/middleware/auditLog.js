@@ -20,6 +20,9 @@ const DETAILS = [
   [/^POST \/faculty\/certificates\/:id\/revoke$/, ["reason"]],
   [/^POST \/faculty\/certificates\/:id\/replacement$/, ["recipientName", "seminarTitle", "seminarDate"]],
   [/^(POST \/faculty\/certificate-templates|PATCH \/faculty\/certificate-templates\/:id)$/, ["name"]],
+  // Never the generated password: it is only in the response, which is not logged.
+  [/^POST \/faculty\/members$/, ["firstName", "lastName", "email", "canIssue"]],
+  [/^PATCH \/faculty\/members\/:id$/, ["canIssue", "active"]],
 ];
 const clip = value => typeof value === "string" ? value.slice(0, 300)
   : typeof value === "number" || typeof value === "boolean" ? value

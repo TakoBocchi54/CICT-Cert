@@ -121,7 +121,7 @@ async function candidates(client, seminarID, context) {
 
 function summary(rows, batch) {
   return { transactionStatus: null, transactionHash: null, issued: 0, ...batch, remaining: rows.filter(row => !row.reason).length,
-    skipped: rows.filter(row => row.reason).map(({ certificateNo, recipientName, reason }) => ({ certificateNo, recipientName, reason })) };
+    skipped: rows.filter(row => row.reason).map(({ certificateNo, seminarDate, recipientName, reason }) => ({ certificateNo, seminarDate, recipientName, reason })) };
 }
 
 // One batch = every MINT row sharing the transaction hash. Batch position (and so token order) is certificate-number order.

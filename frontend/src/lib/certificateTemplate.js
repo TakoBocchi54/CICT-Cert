@@ -23,7 +23,7 @@ export const FIELD_LABELS = {
   recipientName: 'Recipient name', seminarTitle: 'Seminar title', seminarDate: 'Seminar date', certificateNo: 'Certificate no.', qr: 'QR code',
 };
 
-export const SAMPLE_CERTIFICATE = { id: '000123', recipient: 'Juan Dela Cruz', seminar: 'Sample Seminar on Web Security', iso: new Date().toISOString().slice(0, 10), status: 'Verified' };
+export const SAMPLE_CERTIFICATE = { id: 1, recipient: 'Juan Dela Cruz', seminar: 'Sample Seminar on Web Security', iso: new Date().toISOString().slice(0, 10), status: 'Verified' };
 
 export const newSignatureField = signatureID => ({
   signatureID, x: 50, y: 84, width: 18, line: true, name: '', title: '', size: 1.3, font: 'sans', color: '#16231d',
