@@ -51,6 +51,7 @@ test("faculty account management with PostgreSQL", { skip: !local && "Requires l
     INSERT INTO cict_faculty ("userID", "firstName", "lastName", "canIssue") VALUES (1, 'Ana', 'Reyes', true), (2, 'Ben', 'Santos', true);`
     .replaceAll("$1", `'${hash}'`));
   const app = express();
+  app.set("trust proxy", 1); // so a test can send each login from a different X-Forwarded-For address
   app.use(express.json(), cookieParser(), auditLog);
   app.use("/api", memberRouter, authRouter, accountRouter, studentRouter);
   server = app.listen(0, "127.0.0.1");
@@ -158,5 +159,14 @@ test("faculty account management with PostgreSQL", { skip: !local && "Requires l
     const everything = rows.map(row => row.details).join(" ");
     assert.doesNotMatch(everything, /password/i);
     assert.match(everything, /juan@ub\.edu\.ph/i, "the email as typed in the request");
+  });
+
+  await t.test("guessing one account's password from ever-new IPs stops after 20 failures; other accounts still sign in", async () => {
+    let ip = 0;
+    const loginFrom = (email, password) => fetch(base + "/auth/faculty/login", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-Forwarded-For": `198.51.100.${++ip}` }, body: JSON.stringify({ email, password }) });
+    for (let i = 0; i < 20; i++) assert.equal((await loginFrom("ana@example.test", "wrong-guess-" + i)).status, 401);
+    assert.equal((await loginFrom("ANA@example.test ", "wrong-guess")).status, 429, "the account is keyed by its normalized email");
+    assert.equal((await loginFrom("ben@example.test", "admin-password-123")).status, 200);
   });
 });

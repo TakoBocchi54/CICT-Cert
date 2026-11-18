@@ -26,7 +26,7 @@ router.patch("/faculty/account", async (req, res) => {
   const firstName = typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
   const lastName = typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
   if (!firstName || !lastName || firstName.length > 255 || lastName.length > 255) {
-    return res.status(400).json({ error: "First and last names must each contain 1?255 characters." });
+    return res.status(400).json({ error: "First and last names must each contain 1–255 characters." });
   }
   const { rows } = await pool.query(
     `UPDATE cict_faculty f SET "firstName" = $1, "lastName" = $2

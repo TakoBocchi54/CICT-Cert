@@ -1,8 +1,12 @@
 import "dotenv/config";
 import { pool } from "../src/db/pool.js";
+import { certificateContract } from "../src/services/certificates.js";
+import abi from "../src/contracts/CICTCertificate.abi.json" with { type: "json" };
 
 // Pre-deployment cleanup: removes ALL seminars, students, certificates and transaction records.
-// Keeps faculty accounts and issuer_wallet. It cannot touch anything already minted on-chain.
+// Keeps faculty accounts and issuer_wallet. It cannot touch anything already minted on-chain, so it only runs
+// against a freshly deployed CONTRACT_ADDRESS: on a used contract the chain's revocation root would no longer match
+// the (now empty) database, and every verification and revocation would fail from then on.
 const tables = ["blockchain_record", "certificate", "seminar_registration", "seminar", "student_wallet", "student"];
 const counts = async client => {
   const result = {};
@@ -13,6 +17,12 @@ const counts = async client => {
 const client = await pool.connect();
 try {
   console.log(`Database: ${new URL(process.env.DATABASE_URL).host}`);
+  const { client: rpc, address } = certificateContract();
+  const batches = await rpc.readContract({ address, abi, functionName: "lastBatchId" });
+  if (batches !== 0n) {
+    throw new Error(`CONTRACT_ADDRESS ${address} has already issued ${batches} batch(es). Deploy a new contract, set CONTRACT_ADDRESS to it, then reset.`);
+  }
+  console.log(`Contract: ${address} (fresh, nothing issued yet)`);
   console.log("Rows that will be deleted:", await counts(client));
   if (!process.argv.includes("--yes")) {
     console.log("Nothing deleted. Back up first, then re-run with --yes.");

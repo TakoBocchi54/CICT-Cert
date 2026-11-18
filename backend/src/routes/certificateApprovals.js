@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { polygonAmoy } from "viem/chains";
 import { pool } from "../db/pool.js";
+import { isId } from "../utils/http.js";
 import { requireStudent } from "../middleware/requireStudent.js";
 import { certificateTemplateSql } from "../utils/certificateTemplate.js";
 import { certificateContract, inclusionProof } from "../services/certificates.js";
@@ -22,7 +23,7 @@ router.use("/student/certificates", requireStudent, async (req, res, next) => {
 });
 
 router.param("certificateID", (_req, res, next, value) => {
-  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
+  if (!isId(value)) {
     return res.status(400).json({ error: "Invalid certificate ID." });
   }
   next();
@@ -39,7 +40,8 @@ router.get("/student/certificates", async (req, res) => {
      LEFT JOIN LATERAL (SELECT "tokenID", "transactionHash", "blockNum" FROM blockchain_record
        WHERE "certificateID" = c."certificateID" AND "transactionType" = 'MINT' AND "transactionStatus" = 'CONFIRMED'
        ORDER BY "transactionID" DESC LIMIT 1) b ON true
-     WHERE c."studentID" = $1 ORDER BY c."certificateNo" DESC`,
+     -- Students see a certificate only once it is issued; names may still be corrected before that.
+     WHERE c."studentID" = $1 AND c.status IN ('ISSUED', 'REVOKED') ORDER BY c."certificateNo" DESC`,
     [req.student.studentID],
   );
   res.json(rows);

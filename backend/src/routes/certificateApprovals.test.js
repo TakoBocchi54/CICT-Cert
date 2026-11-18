@@ -82,12 +82,15 @@ test("certificate preparation and student certificate list HTTP endpoints", { sk
     return { status: response.status, data: await response.json(), headers: response.headers };
   }
   const prepare = (session = faculty, id = "1") => request(`/faculty/seminars/${id}/certificates/prepare`, session, {});
-  let id, id2;
+  let id;
 
   await t.test("requires live role-specific accounts and issuance permission", async () => {
     for (const session of ["", student, await cookie("FACULTY", "999", "999")]) assert.equal((await prepare(session)).status, 401);
     assert.equal((await prepare(assistant)).status, 403);
     for (const session of ["", faculty, await cookie("STUDENT", "999", "999")]) assert.equal((await request("/student/certificates", session)).status, 401);
+    // The other role's cookie means a sign-in in another tab replaced this one, not an expired session.
+    assert.match((await prepare(student)).data.error, /signed in as a student/);
+    assert.match((await request("/student/certificates", faculty)).data.error, /signed in as faculty/);
   });
   await t.test("rejects wrong network, missing seminar and missing attendance without writes", async () => {
     chainId = "0x89"; assert.equal((await prepare()).status, 503); chainId = "0x13882";
@@ -101,21 +104,17 @@ test("certificate preparation and student certificate list HTTP endpoints", { sk
     assert.equal(results.reduce((sum, result) => sum + result.data.prepared, 0), 2);
     assert.ok(results.every(result => result.data.awaitingWallet === 1));
     const { rows } = await db.query(`SELECT * FROM certificate ORDER BY "studentID"`);
-    assert.equal(rows.length, 2); [id, id2] = rows.map(row => row.certificateID);
+    assert.equal(rows.length, 2); [id] = rows.map(row => row.certificateID);
     assert.equal(rows[0].recipientName, "Juan Dela Cruz"); assert.equal(rows[0].seminarTitle, "Web Security");
     assert.equal(rows[0].authorizedBy, 1); assert.equal(rows[1].studentWalletID, null);
     assert.notEqual(rows[0].certificateNo, rows[1].certificateNo);
     assert.ok(rows.every(row => row.status === "PENDING" && !row.issuedAt && !row.certificateHash));
   });
-  await t.test("students see only their own prepared certificates, with the name that will be issued and no signing step", async () => {
+  await t.test("students see no certificate before it is issued, while faculty may still correct the name", async () => {
     const mine = await request("/student/certificates");
     assert.equal(mine.headers.get("cache-control"), "no-store");
-    assert.equal(mine.data.length, 1); assert.equal(mine.data[0].certificateID, id);
-    assert.equal(mine.data[0].recipientName, "Juan Dela Cruz"); assert.equal(mine.data[0].seminarDate, "2026-11-09");
-    assert.equal(mine.data[0].status, "PENDING"); assert.equal(mine.data[0].walletAddress, account.address);
-    assert.equal("consentSignature" in mine.data[0], false);
-    const other = await request("/student/certificates", student2);
-    assert.equal(other.data.length, 1); assert.equal(other.data[0].certificateID, id2); assert.equal(other.data[0].walletAddress, null);
+    assert.deepEqual(mine.data, [], "prepared (PENDING) certificates stay hidden");
+    assert.deepEqual((await request("/student/certificates", student2)).data, []);
     for (const value of ["0", "abc", "2147483648"]) assert.equal((await request(`/student/certificates/${value}/proof`)).status, 400);
     assert.equal((await request(`/student/certificates/${id}/proof`)).status, 404, "nothing to prove before issuance");
     const list = await request("/faculty/seminars/1/certificates", assistant);

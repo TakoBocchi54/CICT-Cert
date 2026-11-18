@@ -1,6 +1,4 @@
-export class StudentError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
+import { HttpError } from "../utils/http.js";
 
 // Creates student accounts for validated rows ({ full_name, program, google_account }) inside the caller's
 // transaction. Existing student accounts are reused unchanged (name, program and wallet kept). Faculty emails and
@@ -20,7 +18,7 @@ export async function registerStudents(client, students) {
   );
   const newUserIDs = new Set(createdUsers.rows.map(user => user.userID));
   if (accounts.rows.some(account => account.role !== "STUDENT" || (!account.studentID && !newUserIDs.has(account.userID)))) {
-    throw new StudentError(409, "An email belongs to a faculty account or an incomplete student profile. No students were registered; contact CICT to resolve the account.");
+    throw new HttpError(409, "An email belongs to a faculty account or an incomplete student profile. No students were registered; contact CICT to resolve the account.");
   }
   const profiles = await client.query(
     `INSERT INTO student ("userID", "fullName", "program", "contactNumber")

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { verifyCertificate, certificateIssuer } from "../services/certificates.js";
 import { pool } from "../db/pool.js";
 import { certificateHash } from "../utils/certificateConsent.js";
@@ -6,7 +7,16 @@ import { certificateTemplateSql } from "../utils/certificateTemplate.js";
 
 const router = Router();
 
-router.get("/certificates/verify/:certHash", async (req, res) => {
+// Public and each call reads the chain: without a limit a script could use up the RPC quota that issuing needs.
+const verifyLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many verification requests. Please wait a minute and try again." },
+});
+
+router.get("/certificates/verify/:certHash", verifyLimiter, async (req, res) => {
     res.set("Cache-Control", "no-store");
 
     const certHash = req.params.certHash.toLowerCase();

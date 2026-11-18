@@ -13,7 +13,8 @@ const fmt = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { mon
 
 // Public page behind a seminar's registration link: sign in with Google, confirm or enter the name for the
 // certificate, register, then link the embedded wallet (the student's consent) like a normal login.
-export default function RegisterPage({ onLogin }) {
+// facultyName: the faculty member signed in in this browser, if any.
+export default function RegisterPage({ onLogin, facultyName = null }) {
   const { token } = useParams();
   const { web3Auth, isConnected } = useWeb3Auth();
   const { connectTo, loading: connecting, error: connectError } = useWeb3AuthConnect();
@@ -82,6 +83,11 @@ export default function RegisterPage({ onLogin }) {
           {seminar.registrationClosesAt && <p className="mt-1 text-sm text-ink-muted">
             Registration {seminar.open ? 'closes' : 'closed'} {formatDeadline(seminar.registrationClosesAt)}</p>}
         </div>}
+        {/* One login per browser: registering starts a student session and ends this faculty one in every tab.
+            Shown on every step, since a remembered Google sign-in skips straight to the form. */}
+        {facultyName && !finishing && <p role="note" className="mb-4 rounded-xl bg-pending-bg p-4 text-sm text-pending">
+          You're signed in as faculty (<b>{facultyName}</b>) in this browser. Registering here signs you out of that account.
+          To try the link or let a student register on this computer, open it in a private window instead.</p>}
         {body}
       </div>
       {showConsent && <ConsentDialog onClose={() => setShowConsent(false)} />}

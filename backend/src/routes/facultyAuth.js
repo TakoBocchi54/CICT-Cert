@@ -15,10 +15,22 @@ const loginLimiter = rateLimit({
   message: { error: "Too many attempts. Please try again in a few minutes." },
 });
 
+// Per account as well: a caller who reaches the backend directly can fake X-Forwarded-For and look like a new IP
+// on every try. Successful logins don't count, so only failed guesses use up an account's tries.
+const accountLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  keyGenerator: req => String(req.body?.email ?? "").toLowerCase().trim(),
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts for this account. Please try again in 15 minutes." },
+});
+
 // Compared against when the email doesn't exist, so response time doesn't reveal valid emails
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 10);
 
-router.post("/auth/faculty/login", loginLimiter, async (req, res) => {
+router.post("/auth/faculty/login", loginLimiter, accountLoginLimiter, async (req, res) => {
   const email = String(req.body.email ?? "").toLowerCase().trim();
   const password = String(req.body.password ?? "");
   if (!email || !password) {

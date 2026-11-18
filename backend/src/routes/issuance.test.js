@@ -88,7 +88,9 @@ test("batch issuance with PostgreSQL and a local Amoy RPC fixture", { skip }, as
     const { seminarID } = await preparedSeminar(db, [1]);
     delete process.env.ISSUER_PRIVATE_KEY; assert.equal((await issue(seminarID)).status, 503);
     process.env.ISSUER_PRIVATE_KEY = generatePrivateKey(); assert.equal((await issue(seminarID)).status, 503);
-    process.env.ISSUER_PRIVATE_KEY = amoy.issuerKey; chain.chainId = "0x89"; assert.equal((await issue(seminarID)).status, 503); chain.chainId = "0x13882";
+    // The issuer is read once per RPC URL and contract, so a wrong network shows on a configuration not read before.
+    process.env.ISSUER_PRIVATE_KEY = amoy.issuerKey; chain.chainId = "0x89"; process.env.CONTRACT_ADDRESS = "0x6666666666666666666666666666666666666666";
+    assert.equal((await issue(seminarID)).status, 503); chain.chainId = "0x13882"; process.env.CONTRACT_ADDRESS = amoy.contractAddress;
     chain.balance = "0x0"; const noFunds = await issue(seminarID); assert.equal(noFunds.status, 503, JSON.stringify(noFunds)); chain.balance = "0xde0b6b3a7640000";
     assert.equal(await attempts(), 0);
     assert.equal((await rowsOf(seminarID))[0].certificateHash, null, "a failed preparation does not freeze the certificate");

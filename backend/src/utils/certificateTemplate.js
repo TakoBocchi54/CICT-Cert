@@ -1,5 +1,7 @@
 // Certificate templates: uploaded background + placed fields. Rendering only; the certificate hash never includes them.
 
+import { HttpError } from "./http.js";
+
 export const TEMPLATE_IMAGE_BYTES = 5 * 1024 * 1024;
 export const SIGNATURE_IMAGE_BYTES = 1024 * 1024;
 export const MIN_TEMPLATE_WIDTH = 1000;
@@ -8,10 +10,6 @@ export const TEXT_FIELDS = ["recipientName", "seminarTitle", "seminarDate", "cer
 export const FONTS = ["serif", "sans", "script", "mono"];
 const PAPERS = [{ name: "A4", mm: [297, 210] }, { name: "Letter", mm: [279.4, 215.9] }];
 export const PAPER_HINT = "A4 (e.g. 3508×2480 or 1754×1240 px) or US Letter (e.g. 3300×2550 or 1650×1275 px), landscape or portrait";
-
-export class TemplateError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
 
 // Type and pixel size from the file header: PNG IHDR or the JPEG start-of-frame marker. Anything else returns null.
 export function imageInfo(buffer) {
@@ -50,25 +48,25 @@ export function paperSize(width, height) {
 
 export function readTemplateImage(body) {
   const info = imageInfo(body);
-  if (!info) throw new TemplateError(400, "Upload a PNG or JPG image.");
+  if (!info) throw new HttpError(400, "Upload a PNG or JPG image.");
   if (info.width < MIN_TEMPLATE_WIDTH && info.height < MIN_TEMPLATE_WIDTH) {
-    throw new TemplateError(400, `The image is too small to print clearly (${info.width}×${info.height} px). Use at least ${MIN_TEMPLATE_WIDTH} px on the long side.`);
+    throw new HttpError(400, `The image is too small to print clearly (${info.width}×${info.height} px). Use at least ${MIN_TEMPLATE_WIDTH} px on the long side.`);
   }
   if (!paperSize(info.width, info.height)) {
-    throw new TemplateError(400, `The image is ${info.width}×${info.height} px, which isn't a supported paper size. Use ${PAPER_HINT}.`);
+    throw new HttpError(400, `The image is ${info.width}×${info.height} px, which isn't a supported paper size. Use ${PAPER_HINT}.`);
   }
   return info;
 }
 
 export function readSignatureImage(body) {
   const info = imageInfo(body);
-  if (!info) throw new TemplateError(400, "Upload the signature as a PNG or JPG image.");
+  if (!info) throw new HttpError(400, "Upload the signature as a PNG or JPG image.");
   return info;
 }
 
 export function readTemplateName(value) {
   const name = typeof value === "string" ? value.trim() : "";
-  if (!name || name.length > 100) throw new TemplateError(400, "Template name is required (up to 100 characters).");
+  if (!name || name.length > 100) throw new HttpError(400, "Template name is required (up to 100 characters).");
   return name;
 }
 
@@ -81,31 +79,31 @@ const DEFAULT_TEXT = {
 export const defaultFields = () => ({ text: structuredClone(DEFAULT_TEXT), qr: { x: 88, y: 80, size: 12 }, signatures: [] });
 
 const number = (value, min, max, label) => {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new TemplateError(400, `${label} must be a number.`);
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new HttpError(400, `${label} must be a number.`);
   return Math.round(Math.min(max, Math.max(min, value)) * 100) / 100;
 };
 const color = (value, label) => {
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/i.test(value)) throw new TemplateError(400, `${label} must be a color like #16231d.`);
+  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/i.test(value)) throw new HttpError(400, `${label} must be a color like #16231d.`);
   return value.toLowerCase();
 };
 const font = (value, label) => {
-  if (!FONTS.includes(value)) throw new TemplateError(400, `${label} must be one of: ${FONTS.join(", ")}.`);
+  if (!FONTS.includes(value)) throw new HttpError(400, `${label} must be one of: ${FONTS.join(", ")}.`);
   return value;
 };
 const caption = (value, label) => {
   if (value == null) return "";
-  if (typeof value !== "string" || value.trim().length > 100) throw new TemplateError(400, `${label} must be text up to 100 characters.`);
+  if (typeof value !== "string" || value.trim().length > 100) throw new HttpError(400, `${label} must be text up to 100 characters.`);
   return value.trim();
 };
 
 // Whitelists and normalizes the placed fields. Name and QR are always shown; signatures must belong to this template.
 export function readFields(input, signatureIDs) {
-  if (!input || typeof input !== "object") throw new TemplateError(400, "Template fields are required.");
+  if (!input || typeof input !== "object") throw new HttpError(400, "Template fields are required.");
   const text = {};
   for (const key of TEXT_FIELDS) {
     const field = input.text?.[key];
-    if (!field || typeof field !== "object") throw new TemplateError(400, `Missing the ${key} field.`);
-    if (!["left", "center", "right"].includes(field.align)) throw new TemplateError(400, `${key} alignment must be left, center or right.`);
+    if (!field || typeof field !== "object") throw new HttpError(400, `Missing the ${key} field.`);
+    if (!["left", "center", "right"].includes(field.align)) throw new HttpError(400, `${key} alignment must be left, center or right.`);
     text[key] = {
       show: key === "recipientName" ? true : field.show === true,
       x: number(field.x, 0, 100, `${key} X`), y: number(field.y, 0, 100, `${key} Y`),
@@ -115,9 +113,9 @@ export function readFields(input, signatureIDs) {
     };
   }
   const qr = input.qr;
-  if (!qr || typeof qr !== "object") throw new TemplateError(400, "Missing the QR code field.");
+  if (!qr || typeof qr !== "object") throw new HttpError(400, "Missing the QR code field.");
   const signatures = input.signatures ?? [];
-  if (!Array.isArray(signatures) || signatures.length > MAX_SIGNATURES) throw new TemplateError(400, `A template can have up to ${MAX_SIGNATURES} signatures.`);
+  if (!Array.isArray(signatures) || signatures.length > MAX_SIGNATURES) throw new HttpError(400, `A template can have up to ${MAX_SIGNATURES} signatures.`);
   const seen = new Set();
   return {
     text,
@@ -125,7 +123,7 @@ export function readFields(input, signatureIDs) {
     signatures: signatures.map((signature, index) => {
       const label = `Signature ${index + 1}`;
       const id = String(signature?.signatureID ?? "");
-      if (!signatureIDs.includes(id) || seen.has(id)) throw new TemplateError(400, `${label} doesn't belong to this template. Reload and try again.`);
+      if (!signatureIDs.includes(id) || seen.has(id)) throw new HttpError(400, `${label} doesn't belong to this template. Reload and try again.`);
       seen.add(id);
       return {
         signatureID: id, x: number(signature.x, 0, 100, `${label} X`), y: number(signature.y, 0, 100, `${label} Y`),

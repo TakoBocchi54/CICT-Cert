@@ -68,8 +68,7 @@ export async function verifyCertificate(certHash) {
     return { status, tokenID: included.tokenID, recipient, batchId, issuedAt, transactionHash: included.transactionHash };
 }
 
-export async function certificateIssuer() {
-    const { client, address } = certificateContract();
+async function readIssuer(client, address) {
     const [chainId, issuer] = await Promise.all([
         client.getChainId(),
         client.readContract({ address, abi, functionName: "issuer" }),
@@ -78,6 +77,19 @@ export async function certificateIssuer() {
         throw new Error("Invalid issuer network or address");
     }
     return { chainId, contractAddress: address.toLowerCase(), issuerAddress: issuer.toLowerCase() };
+}
+
+// The chain ID and the contract's issuer never change for one RPC URL and contract, so each configuration is read
+// once and kept (a failed read is retried next time). This halves the RPC calls of verify, issue, revoke and notifications.
+const issuers = new Map();
+export function certificateIssuer() {
+    let contract;
+    try { contract = certificateContract(); } catch (err) { return Promise.reject(err); }
+    const key = `${process.env.AMOY_RPC_URL.trim()}|${contract.address}`;
+    if (!issuers.has(key)) {
+        issuers.set(key, readIssuer(contract.client, contract.address).catch(err => { issuers.delete(key); throw err; }));
+    }
+    return issuers.get(key);
 }
 
 // Default 0.5 POL: about two full 100-certificate batches at 25–35 gwei (≈75k gas per certificate).

@@ -1,8 +1,9 @@
 import express, { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireFaculty, requireActiveFaculty } from "../middleware/requireFaculty.js";
+import { HttpError, isId } from "../utils/http.js";
 import {
-  TemplateError, TEMPLATE_IMAGE_BYTES, SIGNATURE_IMAGE_BYTES, MAX_SIGNATURES, defaultFields, readFields,
+  TEMPLATE_IMAGE_BYTES, SIGNATURE_IMAGE_BYTES, MAX_SIGNATURES, defaultFields, readFields,
   readSignatureImage, readTemplateImage, readTemplateName, templateJson,
 } from "../utils/certificateTemplate.js";
 
@@ -13,7 +14,7 @@ const signatureUpload = express.raw({ type: images, limit: SIGNATURE_IMAGE_BYTES
 
 for (const name of ["templateID", "signatureID"]) {
   router.param(name, (req, res, next, value) => {
-    if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) return res.status(400).json({ error: "Invalid ID." });
+    if (!isId(value)) return res.status(400).json({ error: "Invalid ID." });
     next();
   });
 }
@@ -71,14 +72,14 @@ async function changeTemplate(req, res, change) {
     const { rows } = await client.query(
       `SELECT t."createdBy"::text AS "createdBy", f."canIssue" FROM certificate_template t, cict_faculty f
        WHERE t."templateID" = $1 AND f."facultyID" = $2 FOR UPDATE OF t`, [req.params.templateID, req.faculty.facultyID]);
-    if (!rows.length) throw new TemplateError(404, "Template not found.");
+    if (!rows.length) throw new HttpError(404, "Template not found.");
     if (rows[0].createdBy !== String(req.faculty.facultyID) && !rows[0].canIssue) {
-      throw new TemplateError(403, "Only the faculty member who created this template, or one who can issue certificates, can change it.");
+      throw new HttpError(403, "Only the faculty member who created this template, or one who can issue certificates, can change it.");
     }
     await client.query(`SELECT 1 FROM seminar WHERE "templateID" = $1 FOR SHARE`, [req.params.templateID]);
     const used = await client.query(
       `SELECT 1 FROM certificate c JOIN seminar s ON s."seminarID" = c."seminarID" WHERE s."templateID" = $1 LIMIT 1`, [req.params.templateID]);
-    if (used.rowCount) throw new TemplateError(409, "Certificates already use this template, so it can no longer be changed or deleted.");
+    if (used.rowCount) throw new HttpError(409, "Certificates already use this template, so it can no longer be changed or deleted.");
     const result = await change(client);
     await client.query("COMMIT");
     if (result === undefined) return res.status(204).end();
@@ -116,7 +117,7 @@ router.post("/faculty/certificate-templates/:templateID/signatures", signatureUp
   const image = readSignatureImage(req.body);
   const count = (await client.query(
     `SELECT count(*)::int AS n FROM certificate_template_signature WHERE "templateID" = $1`, [req.params.templateID])).rows[0].n;
-  if (count >= MAX_SIGNATURES) throw new TemplateError(409, `A template can have up to ${MAX_SIGNATURES} signatures. Remove one first.`);
+  if (count >= MAX_SIGNATURES) throw new HttpError(409, `A template can have up to ${MAX_SIGNATURES} signatures. Remove one first.`);
   const { rows } = await client.query(
     `INSERT INTO certificate_template_signature ("templateID", "image", "imageType", "imageWidth", "imageHeight")
      VALUES ($1, $2, $3, $4, $5) RETURNING "signatureID"::text AS "signatureID"`,
@@ -128,7 +129,7 @@ router.post("/faculty/certificate-templates/:templateID/signatures", signatureUp
 router.delete("/faculty/certificate-templates/:templateID/signatures/:signatureID", (req, res) => changeTemplate(req, res, async client => {
   const removed = await client.query(
     `DELETE FROM certificate_template_signature WHERE "templateID" = $1 AND "signatureID" = $2`, [req.params.templateID, req.params.signatureID]);
-  if (!removed.rowCount) throw new TemplateError(404, "Signature not found.");
+  if (!removed.rowCount) throw new HttpError(404, "Signature not found.");
   // Drop its placement too, so saved fields never point at a missing image.
   await client.query(
     `UPDATE certificate_template SET "updatedAt" = now(), "fields" = jsonb_set("fields", '{signatures}', COALESCE(
@@ -137,7 +138,7 @@ router.delete("/faculty/certificate-templates/:templateID/signatures/:signatureI
 }));
 
 router.use((err, req, res, next) => {
-  if (err instanceof TemplateError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
   if (err.type === "entity.too.large") {
     const mb = (req.path.includes("/signatures") ? SIGNATURE_IMAGE_BYTES : TEMPLATE_IMAGE_BYTES) / 1024 / 1024;
     return res.status(413).json({ error: `The image is larger than ${mb} MB. Export it smaller and try again.` });

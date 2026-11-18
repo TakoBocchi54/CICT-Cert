@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 import { pool } from "../db/pool.js";
-import { IssuanceError } from "../services/issuance.js";
+import { HttpError, isId } from "../utils/http.js";
 import { issuerBalance } from "../services/certificates.js";
 import { findCertificate, prepareReplacement, revokeCertificates } from "../services/revocation.js";
 import { parseCertificateNoQuery } from "../utils/certificateNumber.js";
@@ -10,7 +10,7 @@ const router = Router();
 router.use("/faculty/certificates", requireFaculty, requireActiveFaculty);
 
 router.param("certificateNo", (req, res, next, value) => {
-  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) {
+  if (!isId(value)) {
     return res.status(400).json({ error: "Invalid certificate number." });
   }
   next();
@@ -62,7 +62,7 @@ router.get("/faculty/certificates", async (req, res) => {
 // Batch revocation: one transaction for every listed certificate. Registered before :certificateNo.
 router.post(["/faculty/certificates/revoke", "/faculty/certificates/revocation/check"], requireCanIssue, async (req, res) => {
   const numbers = req.body?.certificateNos;
-  if (!Array.isArray(numbers) || numbers.some(value => !/^[1-9]\d{0,9}$/.test(String(value)) || BigInt(value) > 2147483647n)) {
+  if (!Array.isArray(numbers) || numbers.some(value => !isId(value))) {
     return res.status(400).json({ error: "Choose the certificates to revoke." });
   }
   res.json(await revokeCertificates(numbers.map(String), req.faculty, req.body.reason, req.path.endsWith("/revoke")));
@@ -89,7 +89,7 @@ router.post("/faculty/certificates/:certificateNo/replacement", requireCanIssue,
 
 router.use((err, _req, res, next) => {
   if (res.headersSent) return next(err);
-  if (err instanceof IssuanceError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
   console.error("Revocation request failed:", { code: err.code || "REQUEST_FAILED" });
   res.status(500).json({ error: "Could not load, revoke or replace the certificate. Please try again." });
 });

@@ -119,13 +119,13 @@ function AppContent() {
 
   const handleSignOut = async () => {
     try {
-      if (isConnected) {
-        await web3Auth.logout();
-      }
-
+      // The backend cookie is what grants access, so it goes first; a Web3Auth failure must not leave it in place.
       await api('/api/auth/logout', {
         method: 'POST',
       });
+      if (isConnected) {
+        await web3Auth.logout().catch(err => console.error('Web3Auth sign-out failed:', err.message));
+      }
 
       setUser(null);
       setSelectedCertId(null);
@@ -181,8 +181,8 @@ function AppContent() {
   // The student pages render only once the list has loaded; this shows the loading or error state meanwhile.
   const certificatesStatus = studentCertificates.isPending ? <p role="status" className="text-sm text-ink-muted">Loading certificates...</p>
     : studentCertificates.error ? <p role="alert" className="text-sm text-revoked">{studentCertificates.error.message}</p> : null;
-  const studentCerts = (studentCertificates.data || []).filter(certificate => ['ISSUED', 'REVOKED'].includes(certificate.status))
-    .map(certificate => ({ id: certificate.certificateNo, certificateID: certificate.certificateID, recipient: certificate.recipientName,
+  // The server lists only issued and revoked certificates.
+  const studentCerts = (studentCertificates.data || []).map(certificate => ({ id: certificate.certificateNo, certificateID: certificate.certificateID, recipient: certificate.recipientName,
       seminar: certificate.seminarTitle, iso: certificate.seminarDate, issuedAt: certificate.issuedAt, hash: certificate.certificateHash,
       status: certificate.status === 'ISSUED' ? 'Verified' : 'Revoked', block: certificate.blockNum,
       tokenID: certificate.tokenID, transactionHash: certificate.transactionHash, template: certificate.template }));
@@ -511,7 +511,7 @@ function AppContent() {
         />
 
         {/* Public seminar registration (the link faculty share) */}
-        <Route path="/register/:token" element={<RegisterPage onLogin={handleLogin} />} />
+        <Route path="/register/:token" element={<RegisterPage onLogin={handleLogin} facultyName={user?.role === 'faculty' ? user.name : null} />} />
 
         {/* Public Verifier */}
         <Route

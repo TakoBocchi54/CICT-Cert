@@ -111,7 +111,9 @@ test("public verification proves inclusion and non-revocation on chain and publi
     t.mock.method(console, "error", () => {});
     const root = chain.revocationRoot; chain.revocationRoot = smtRoot([424242n]);
     assert.equal((await verify(prepared[0])).status, 503); chain.revocationRoot = root;
-    chain.chainId = "0x89"; assert.equal((await verify(prepared[0])).status, 503); chain.chainId = "0x13882";
+    // The issuer is read once per RPC URL and contract, so a wrong network shows on a configuration not read before.
+    chain.chainId = "0x89"; process.env.CONTRACT_ADDRESS = "0x6666666666666666666666666666666666666666";
+    assert.equal((await verify(prepared[0])).status, 503); chain.chainId = "0x13882"; process.env.CONTRACT_ADDRESS = amoy.contractAddress;
     chain.rpcFails = true; const response = await verify(prepared[0]); chain.rpcFails = false;
     assert.equal(response.status, 503); assert.equal(response.data.status, undefined);
     assert.equal((await verify(prepared[0])).data.status, "Valid");

@@ -618,7 +618,6 @@ Backend `.env`:
 ```text
 PORT
 DATABASE_URL
-FRONTEND_URL
 WEB3AUTH_CLIENT_ID
 WEB3AUTH_JWKS_URL
 WEB3AUTH_ISSUER
@@ -656,7 +655,7 @@ Resume in this order:
 
 1. **Review and commit** the 15 November Merkle batch work (contract, backend, frontend, docs). Nothing is committed yet.
 2. **Decide** the per-token batch-ID question (section 6). Changing it means a contract, backend and test change before deploying.
-3. **Deploy and reset** (spends Amoy POL and wipes test data; do it yourself): back up the database, `node scripts/resetTestData.js --yes`, `node scripts/migrateSeminarSchema.js "<original TZ>"` (or apply `007_merkle_batches.sql` alone on an already migrated database), `npx hardhat run scripts/deploy.ts --network amoy` in `smart_contract`, set `CONTRACT_ADDRESS`, restart the backend.
+3. **Deploy and reset** (spends Amoy POL and wipes test data; do it yourself): back up the database, `npx hardhat run scripts/deploy.ts --network amoy` in `smart_contract`, set `CONTRACT_ADDRESS`, `node scripts/resetTestData.js --yes` (it refuses a contract that has already issued), `node scripts/migrateSeminarSchema.js "<original TZ>"` (or apply `007_merkle_batches.sql` alone on an already migrated database), restart the backend.
 4. **Manual run with three test Google accounts:** apply migrations `009` and `010`, create a seminar with a deadline, register each account through the link in a private window (wallet links with consent), tick attendance for all three (and check a fourth, unticked registrant gets nothing), review and correct a name, issue the batch, open `/verify` for each, download a proof file, revoke two in one transaction from the Registry, confirm Revoked for those and Valid for the third, then prepare and issue a replacement as a second batch.
 5. **Cutover**: once link registration works for a small group, remove the CSV import and the Students tab add/import (see "Done (16 November)").
 6. **Release preparation**: migrate Supabase after a backup; deploy frontend and backend together; run one full test on the deployed portal; generate shared PDFs from the deployed frontend.

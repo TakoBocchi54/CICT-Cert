@@ -7,10 +7,7 @@ import { pool } from "../db/pool.js";
 import { certificateContract, certificateIssuer } from "./certificates.js";
 import { certificateHash } from "../utils/certificateConsent.js";
 import { merkleRoot } from "../utils/merkle.js";
-
-export class IssuanceError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
+import { HttpError } from "../utils/http.js";
 
 // Records the contract's issuer in issuer_wallet (if new) and returns its row for new certificates.
 export async function ensureIssuerWallet(client, context) {
@@ -20,7 +17,7 @@ export async function ensureIssuerWallet(client, context) {
      RETURNING "issuerWalletID", "isActive", network`, [context.issuerAddress],
   );
   if (!rows[0].isActive || rows[0].network !== "polygon-amoy") {
-    throw new IssuanceError(409, "The configured issuer wallet is inactive or belongs to a different network.");
+    throw new HttpError(409, "The configured issuer wallet is inactive or belongs to a different network.");
   }
   return rows[0];
 }
@@ -31,18 +28,18 @@ export async function finalizedReceipt(attempt, context, expectedData) {
   const rpc = certificateContract().client;
   if (attempt.contractAddress?.toLowerCase() !== context.contractAddress || attempt.fromAddress?.toLowerCase() !== context.issuerAddress ||
       !attempt.transactionHash) {
-    throw new IssuanceError(409, "The saved transaction does not match this certificate. Contact CICT to reconcile it.");
+    throw new HttpError(409, "The saved transaction does not match this certificate. Contact CICT to reconcile it.");
   }
   let receipt;
   try { receipt = await rpc.getTransactionReceipt({ hash: attempt.transactionHash }); }
   catch (err) { if (err.name !== "TransactionReceiptNotFoundError") throw err; }
   if (!receipt) {
-    if (!attempt.signedTransaction) throw new IssuanceError(409, "This pending transaction has no saved signed payload. Contact CICT; do not send another transaction.");
+    if (!attempt.signedTransaction) throw new HttpError(409, "This pending transaction has no saved signed payload. Contact CICT; do not send another transaction.");
     const signed = parseTransaction(attempt.signedTransaction);
     if (keccak256(attempt.signedTransaction) !== attempt.transactionHash || signed.chainId !== polygonAmoy.id ||
         signed.to?.toLowerCase() !== context.contractAddress || (signed.value ?? 0n) !== 0n || signed.data !== expectedData ||
         (await recoverTransactionAddress({ serializedTransaction: attempt.signedTransaction })).toLowerCase() !== context.issuerAddress) {
-      throw new IssuanceError(409, "The saved signed transaction is invalid. Contact CICT.");
+      throw new HttpError(409, "The saved signed transaction is invalid. Contact CICT.");
     }
     // A send error can mean the RPC accepted the transaction before the connection failed.
     try { await rpc.sendRawTransaction({ serializedTransaction: attempt.signedTransaction }); }
@@ -51,7 +48,7 @@ export async function finalizedReceipt(attempt, context, expectedData) {
   }
   if (!["success", "reverted"].includes(receipt.status) || receipt.transactionHash !== attempt.transactionHash ||
       receipt.from?.toLowerCase() !== context.issuerAddress || receipt.to?.toLowerCase() !== context.contractAddress) {
-    throw new IssuanceError(409, "The receipt does not match the saved issuer transaction. Contact CICT.");
+    throw new HttpError(409, "The receipt does not match the saved issuer transaction. Contact CICT.");
   }
   const finalized = await rpc.getBlock({ blockTag: "finalized" });
   if (finalized.number === null || finalized.number <= receipt.blockNumber) return {};
@@ -66,17 +63,17 @@ export async function lockIssuer(client, context, faculty) {
   await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`amoy:${context.issuerAddress}`]);
   const outstanding = await client.query(`SELECT "transactionID" FROM blockchain_record WHERE lower("fromAddress") = $1
     AND network = 'polygon-amoy' AND "transactionStatus" = 'PENDING' LIMIT 1`, [context.issuerAddress]);
-  if (outstanding.rowCount) throw new IssuanceError(409, "Another issuer transaction is pending. Check its status before sending another.");
+  if (outstanding.rowCount) throw new HttpError(409, "Another issuer transaction is pending. Check its status before sending another.");
   const permission = await client.query(`SELECT "canIssue" FROM cict_faculty WHERE "facultyID" = $1 AND "userID" = $2 FOR SHARE`,
     [faculty.facultyID, faculty.userID]);
-  if (!permission.rows[0]?.canIssue) throw new IssuanceError(403, "You are not authorized to issue certificates.");
+  if (!permission.rows[0]?.canIssue) throw new HttpError(403, "You are not authorized to issue certificates.");
   try {
     const privateKey = process.env.ISSUER_PRIVATE_KEY?.trim();
     if (!/^0x[0-9a-fA-F]{64}$/.test(privateKey || "")) throw new Error("Missing key");
     const account = privateKeyToAccount(privateKey);
     if (account.address.toLowerCase() !== context.issuerAddress) throw new Error("Wrong issuer");
     return account;
-  } catch { throw new IssuanceError(503, "Configure ISSUER_PRIVATE_KEY in the backend for the contract's issuer wallet."); }
+  } catch { throw new HttpError(503, "Configure ISSUER_PRIVATE_KEY in the backend for the contract's issuer wallet."); }
 }
 
 export async function signIssuerCall(account, context, functionName, args, label) {
@@ -88,7 +85,7 @@ export async function signIssuerCall(account, context, functionName, args, label
     const balance = await rpc.getBalance({ address: account.address });
     if (balance < request.gas * (request.maxFeePerGas ?? request.gasPrice)) throw new Error("Insufficient balance");
     return await wallet.signTransaction(request);
-  } catch { throw new IssuanceError(503, `Could not prepare the ${label}. Check the issuer's Amoy POL balance and RPC connection.`); }
+  } catch { throw new HttpError(503, `Could not prepare the ${label}. Check the issuer's Amoy POL balance and RPC connection.`); }
 }
 
 // Certificates minted per issuing transaction. Measured at about 75k gas each (smart_contract/test/GasBenchmark.ts):
@@ -134,7 +131,7 @@ async function reconcile(client, seminarID, transactionHash, context) {
      WHERE b."transactionHash" = $1 AND b."transactionType" = 'MINT' AND c."seminarID" = $2
      ORDER BY c."certificateNo" FOR UPDATE OF c`, [transactionHash, seminarID]);
   if (rows.some(row => row.toAddress?.toLowerCase() !== row.walletAddress.toLowerCase() || certificateHash(row, context) !== row.certificateHash)) {
-    throw new IssuanceError(409, "The saved transaction does not match its certificates. Contact CICT to reconcile it.");
+    throw new HttpError(409, "The saved transaction does not match its certificates. Contact CICT to reconcile it.");
   }
   const ids = rows.map(row => row.certificateID), hashes = rows.map(row => row.certificateHash), root = merkleRoot(hashes);
   // The signed payload is saved on one row of the batch only.
@@ -157,7 +154,7 @@ async function reconcile(client, seminarID, transactionHash, context) {
   if (!batch || batch.args.seminarId !== BigInt(seminarID) || batch.args.root !== root || first < 1n ||
       first + BigInt(rows.length) > 2147483647n || batch.args.certHashes.length !== rows.length ||
       rows.some((row, i) => batch.args.certHashes[i] !== row.certificateHash || minted.get(first + BigInt(i)) !== row.walletAddress.toLowerCase())) {
-    throw new IssuanceError(409, "The receipt has no matching batch issuance event. Contact CICT.");
+    throw new HttpError(409, "The receipt has no matching batch issuance event. Contact CICT.");
   }
   await client.query(`UPDATE blockchain_record b SET "transactionStatus" = 'CONFIRMED', "blockNum" = $2, "tokenID" = v.token
     FROM unnest($3::int[], $4::int[]) AS v(id, token)
@@ -173,12 +170,12 @@ async function reconcile(client, seminarID, transactionHash, context) {
 export async function issueSeminarBatch(seminarID, faculty, allowNew = true) {
   let context;
   try { context = await certificateIssuer(); }
-  catch { throw new IssuanceError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
+  catch { throw new HttpError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const seminar = await client.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1 FOR UPDATE`, [seminarID]);
-    if (!seminar.rowCount) throw new IssuanceError(404, "Seminar not found.");
+    if (!seminar.rowCount) throw new HttpError(404, "Seminar not found.");
     const pending = (await client.query(`SELECT b."transactionHash" FROM blockchain_record b JOIN certificate c USING ("certificateID")
       WHERE c."seminarID" = $1 AND b."transactionType" = 'MINT' AND b."transactionStatus" = 'PENDING' LIMIT 1`, [seminarID])).rows[0];
     if (pending || !allowNew) {
@@ -187,7 +184,7 @@ export async function issueSeminarBatch(seminarID, faculty, allowNew = true) {
       await client.query("COMMIT"); return result;
     }
     const batch = (await candidates(client, seminarID, context)).filter(row => !row.reason).slice(0, batchSize());
-    if (!batch.length) throw new IssuanceError(409, "No certificate is ready to issue. Each one needs confirmed attendance and a linked wallet.");
+    if (!batch.length) throw new HttpError(409, "No certificate is ready to issue. Each one needs confirmed attendance and a linked wallet.");
     const account = await lockIssuer(client, context, faculty);
     const ids = batch.map(row => row.certificateID), wallets = batch.map(row => row.walletAddress);
     const hashes = batch.map(row => certificateHash(row, context));

@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import cookieParser from "cookie-parser";
 import healthRoutes from "./routes/health.js";
 import studentAuthRoutes from "./routes/studentAuth.js";
@@ -25,7 +24,8 @@ const app = express();
 // shortcut: trusts a fixed 2 hops (Vercel rewrite -> Render); adjust if the proxy chain changes.
 app.set("trust proxy", 2);
 
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+// No CORS: the frontend always calls relative /api paths (Vite proxy in development, Vercel rewrite in production),
+// so the browser never makes a cross-origin request to this API.
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 app.use(auditLog);

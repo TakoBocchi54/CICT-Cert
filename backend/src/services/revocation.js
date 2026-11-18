@@ -2,7 +2,8 @@ import { encodeFunctionData, keccak256, parseEventLogs } from "viem";
 import abi from "../contracts/CICTCertificate.abi.json" with { type: "json" };
 import { pool } from "../db/pool.js";
 import { certificateContract, certificateIssuer, revokedTokenIds } from "./certificates.js";
-import { IssuanceError, ensureIssuerWallet, finalizedReceipt, lockIssuer, signIssuerCall } from "./issuance.js";
+import { ensureIssuerWallet, finalizedReceipt, lockIssuer, signIssuerCall } from "./issuance.js";
+import { HttpError, isIsoDate } from "../utils/http.js";
 import { smtRoot } from "../utils/merkle.js";
 import { formatCertificateNo } from "../utils/certificateNumber.js";
 
@@ -67,7 +68,7 @@ async function reconcile(client, transactionHash, context) {
   const events = parseEventLogs({ abi, eventName: "RevocationRootUpdated", logs: receipt.logs.filter(log => log.address.toLowerCase() === context.contractAddress) });
   if (!events.some(event => event.args.newRoot === root && event.args.tokenIds.length === tokenIDs.length &&
       event.args.tokenIds.every((tokenID, i) => tokenID === tokenIDs[i]))) {
-    throw new IssuanceError(409, "The receipt has no matching revocation event. Contact CICT.");
+    throw new HttpError(409, "The receipt has no matching revocation event. Contact CICT.");
   }
   await client.query(`UPDATE blockchain_record SET "transactionStatus" = 'CONFIRMED', "blockNum" = $2
     WHERE "transactionHash" = $1 AND "transactionType" = 'REVOKE'`, [transactionHash, receipt.blockNumber.toString()]);
@@ -80,14 +81,14 @@ async function reconcile(client, transactionHash, context) {
 // allowNew = false only reconciles or rebroadcasts an existing attempt; it never signs a new transaction.
 export async function revokeCertificates(certificateNos, faculty, reason, allowNew = true) {
   const numbers = [...new Set(certificateNos)];
-  if (!numbers.length || numbers.length > MAX_BATCH) throw new IssuanceError(400, `Choose between 1 and ${MAX_BATCH} certificates to revoke.`);
+  if (!numbers.length || numbers.length > MAX_BATCH) throw new HttpError(400, `Choose between 1 and ${MAX_BATCH} certificates to revoke.`);
   if (allowNew) {
     reason = typeof reason === "string" ? reason.trim() : "";
-    if (!reason || reason.length > MAX_REASON_LENGTH) throw new IssuanceError(400, `Enter a revocation reason of up to ${MAX_REASON_LENGTH} characters.`);
+    if (!reason || reason.length > MAX_REASON_LENGTH) throw new HttpError(400, `Enter a revocation reason of up to ${MAX_REASON_LENGTH} characters.`);
   }
   let context;
   try { context = await certificateIssuer(); }
-  catch { throw new IssuanceError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
+  catch { throw new HttpError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
   const client = await pool.connect();
   let warning;
   try {
@@ -101,7 +102,7 @@ export async function revokeCertificates(certificateNos, faculty, reason, allowN
       return rows;
     };
     let certificates = found.rowCount ? await load() : [];
-    if (certificates.length !== numbers.length) throw new IssuanceError(404, "Certificate not found.");
+    if (certificates.length !== numbers.length) throw new HttpError(404, "Certificate not found.");
     const finish = async () => {
       await client.query("COMMIT");
       return { ...(warning && { warning }), certificates: certificates.map(certificate => result(certificate, certificate.attempt)) };
@@ -115,16 +116,16 @@ export async function revokeCertificates(certificateNos, faculty, reason, allowN
     const batch = certificates.filter(certificate => certificate.status !== "REVOKED");
     if (!allowNew || !batch.length) return await finish();
     for (const certificate of batch) {
-      if (certificate.status !== "ISSUED") throw new IssuanceError(409, `Only issued certificates can be revoked (certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}).`);
+      if (certificate.status !== "ISSUED") throw new HttpError(409, `Only issued certificates can be revoked (certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)}).`);
       if (!certificate.tokenID || !certificate.walletAddress || certificate.mintContract?.toLowerCase() !== context.contractAddress) {
-        throw new IssuanceError(409, `Certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)} was not minted by the configured contract. Contact CICT to reconcile it.`);
+        throw new HttpError(409, `Certificate ${formatCertificateNo(certificate.certificateNo, certificate.seminarDate)} was not minted by the configured contract. Contact CICT to reconcile it.`);
       }
     }
     const account = await lockIssuer(client, context, faculty);
     const { confirmed } = await revokedTokenIds(client, context.contractAddress);
     const onchain = await certificateContract().client.readContract({ address: context.contractAddress, abi, functionName: "revocationRoot" });
     if (onchain !== smtRoot(confirmed)) {
-      throw new IssuanceError(409, "Amoy's revocation root does not match the revocations saved here. Contact CICT to reconcile it.");
+      throw new HttpError(409, "Amoy's revocation root does not match the revocations saved here. Contact CICT to reconcile it.");
     }
     const tokenIDs = batch.map(certificate => BigInt(certificate.tokenID));
     const signedTransaction = await signIssuerCall(account, context, "revokeBatch", [smtRoot([...confirmed, ...tokenIDs]), tokenIDs], "revocation");
@@ -146,12 +147,10 @@ const validText = value => value && value.length <= 255 && !/[\u0000-\u001f\u007
 
 function readFacts(body) {
   const facts = { recipientName: text(body?.recipientName), seminarTitle: text(body?.seminarTitle), seminarDate: text(body?.seminarDate) };
-  if (!validText(facts.recipientName)) throw new IssuanceError(400, "Enter a recipient name containing 1–255 characters.");
-  if (!validText(facts.seminarTitle)) throw new IssuanceError(400, "Enter a seminar title containing 1–255 characters.");
-  const date = facts.seminarDate;
-  if (!/^(?!0000)\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) ||
-      new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
-    throw new IssuanceError(400, "Enter a valid seminar date in YYYY-MM-DD format.");
+  if (!validText(facts.recipientName)) throw new HttpError(400, "Enter a recipient name containing 1–255 characters.");
+  if (!validText(facts.seminarTitle)) throw new HttpError(400, "Enter a seminar title containing 1–255 characters.");
+  if (!isIsoDate(facts.seminarDate)) {
+    throw new HttpError(400, "Enter a valid seminar date in YYYY-MM-DD format.");
   }
   return facts;
 }
@@ -160,7 +159,7 @@ function readFacts(body) {
 // frozen; after issuance the only correction is revoke and replace.
 export async function correctRecipientName(seminarID, certificateID, body) {
   const recipientName = text(body?.recipientName);
-  if (!validText(recipientName)) throw new IssuanceError(400, "Enter a recipient name containing 1–255 characters.");
+  if (!validText(recipientName)) throw new HttpError(400, "Enter a recipient name containing 1–255 characters.");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -170,9 +169,9 @@ export async function correctRecipientName(seminarID, certificateID, body) {
       `SELECT c.status, EXISTS (SELECT 1 FROM blockchain_record b WHERE b."certificateID" = c."certificateID"
          AND b."transactionStatus" = 'PENDING') AS "inTransaction"
        FROM certificate c WHERE c."certificateID" = $1 AND c."seminarID" = $2 FOR UPDATE OF c`, [certificateID, seminarID]);
-    if (!rows.length) throw new IssuanceError(404, "Certificate not found in this seminar.");
-    if (!["PENDING", "FAILED"].includes(rows[0].status)) throw new IssuanceError(409, "This certificate is already issued. Revoke it and prepare a replacement to correct the name.");
-    if (rows[0].inTransaction) throw new IssuanceError(409, "This certificate is in a pending transaction. Check that transaction first.");
+    if (!rows.length) throw new HttpError(404, "Certificate not found in this seminar.");
+    if (!["PENDING", "FAILED"].includes(rows[0].status)) throw new HttpError(409, "This certificate is already issued. Revoke it and prepare a replacement to correct the name.");
+    if (rows[0].inTransaction) throw new HttpError(409, "This certificate is in a pending transaction. Check that transaction first.");
     // Clearing the hash is what the trigger requires before a hashed fact may change; issuance computes it again.
     const updated = await client.query(`UPDATE certificate SET "recipientName" = $2, "certificateHash" = NULL
       WHERE "certificateID" = $1 RETURNING "certificateID", "certificateNo", "recipientName"`, [certificateID, recipientName]);
@@ -188,19 +187,19 @@ export async function prepareReplacement(certificateNo, faculty, body) {
   const facts = readFacts(body);
   let context;
   try { context = await certificateIssuer(); }
-  catch { throw new IssuanceError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
+  catch { throw new HttpError(503, "Cannot read the configured Amoy issuer. Check blockchain configuration and try again."); }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const found = await client.query(`SELECT "seminarID" FROM certificate WHERE "certificateNo" = $1`, [certificateNo]);
-    if (!found.rowCount) throw new IssuanceError(404, "Certificate not found.");
+    if (!found.rowCount) throw new HttpError(404, "Certificate not found.");
     // Same seminar row lock as attendance import, preparation and issuance.
     await client.query(`SELECT "seminarID" FROM seminar WHERE "seminarID" = $1 FOR UPDATE`, [found.rows[0].seminarID]);
     const original = (await client.query(CERTIFICATES + ` FOR UPDATE OF c`, [[certificateNo]])).rows[0];
-    if (original.status !== "REVOKED") throw new IssuanceError(409, "Only a revoked certificate can be replaced. Revoke it first.");
+    if (original.status !== "REVOKED") throw new HttpError(409, "Only a revoked certificate can be replaced. Revoke it first.");
     const existing = await activeCertificate(client, original);
-    if (existing) throw new IssuanceError(409, `A replacement already exists: certificate ${formatCertificateNo(existing.certificateNo, existing.seminarDate)}.`);
-    if (!original.attended) throw new IssuanceError(409, "The recipient's attendance is no longer confirmed for this seminar.");
+    if (existing) throw new HttpError(409, `A replacement already exists: certificate ${formatCertificateNo(existing.certificateNo, existing.seminarDate)}.`);
+    if (!original.attended) throw new HttpError(409, "The recipient's attendance is no longer confirmed for this seminar.");
     const issuer = await ensureIssuerWallet(client, context);
     const { rows } = await client.query(
       `INSERT INTO certificate ("studentID", "seminarID", "studentWalletID", "authorizedBy", "issuerWalletID",

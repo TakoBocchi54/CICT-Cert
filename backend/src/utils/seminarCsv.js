@@ -1,6 +1,9 @@
 import { parse } from "csv-parse/sync";
 
-export class CsvError extends Error {}
+import { HttpError } from "./http.js";
+
+// Always a 400: the uploaded list or a row in it is invalid.
+export class CsvError extends HttpError { constructor(message) { super(400, message); } }
 export const MAX_CSV_BYTES = 1024 * 1024;
 
 function readRows(csv, required, optional = []) {
@@ -62,8 +65,9 @@ export function readStudentRows(rows, label = "CSV record") {
     if (!isContactNumber(contact)) throw new CsvError(`${where}: enter an 11-digit contact number, for example 09171234567.`);
     student.contact_number = contact;
     const previous = students.get(student.google_account);
-    if (previous && (previous.full_name !== student.full_name || previous.program !== student.program)) {
-      throw new CsvError(`${where}: a repeated email has conflicting names or programs. Correct it before importing.`);
+    if (previous && (previous.full_name !== student.full_name || previous.program !== student.program ||
+        previous.contact_number !== student.contact_number)) {
+      throw new CsvError(`${where}: a repeated email has conflicting names, programs or contact numbers. Correct it before importing.`);
     }
     students.set(student.google_account, student);
   }

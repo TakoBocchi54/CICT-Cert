@@ -5,14 +5,18 @@ import { pool } from "../db/pool.js";
 export async function requireFaculty(req, res, next) {
   const token = req.cookies[COOKIE];
   if (!token) return res.status(401).json({ error: "Not signed in" });
+  let payload;
   try {
-    const { payload } = await jwtVerify(token, secret);
-    if (payload.role !== "FACULTY") throw new Error("wrong role");
-    req.faculty = { userID: payload.userID, facultyID: payload.facultyID };
-    next();
+    ({ payload } = await jwtVerify(token, secret));
   } catch {
-    res.status(401).json({ error: "Session expired. Please sign in again." });
+    return res.status(401).json({ error: "Session expired. Please sign in again." });
   }
+  // One login cookie per browser: a student sign-in in another tab (e.g. a registration link) replaced this one.
+  if (payload.role !== "FACULTY") {
+    return res.status(401).json({ error: "This browser is now signed in as a student, probably in another tab. Sign in again as faculty." });
+  }
+  req.faculty = { userID: payload.userID, facultyID: payload.facultyID };
+  next();
 }
 
 // Use after requireFaculty to reject sessions whose faculty account no longer exists or was deactivated.

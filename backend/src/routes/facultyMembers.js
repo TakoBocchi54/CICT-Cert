@@ -2,6 +2,7 @@ import { Router } from "express";
 import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
+import { HttpError, isId } from "../utils/http.js";
 import { requireFaculty, requireActiveFaculty, requireCanIssue } from "../middleware/requireFaculty.js";
 
 // Faculty account management for faculty with issuing permission: add organizers, set what they may do, reset a
@@ -10,13 +11,9 @@ const router = Router();
 router.use("/faculty/members", requireFaculty, requireActiveFaculty, requireCanIssue);
 router.use("/faculty/members", (_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
 router.param("facultyID", (req, res, next, value) => {
-  if (!/^[1-9]\d{0,9}$/.test(value) || BigInt(value) > 2147483647n) return res.status(400).json({ error: "Invalid faculty ID." });
+  if (!isId(value)) return res.status(400).json({ error: "Invalid faculty ID." });
   next();
 });
-
-class MemberError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
 
 const MEMBER_COLUMNS = `f."facultyID", f."firstName", f."lastName", f."canIssue", f."deactivatedAt", f."temporaryPassword",
   u."email", u."createdAt"`;
@@ -62,7 +59,7 @@ router.post("/faculty/members", async (req, res) => {
     res.status(201).json({ member, temporaryPassword: password });
   } catch (err) {
     await client.query("ROLLBACK");
-    if (err.code === "23505") throw new MemberError(409, "That email already has an account (faculty or student).");
+    if (err.code === "23505") throw new HttpError(409, "That email already has an account (faculty or student).");
     throw err;
   } finally { client.release(); }
 });
@@ -77,7 +74,7 @@ router.patch("/faculty/members/:facultyID", async (req, res) => {
   }
   const target = Number(req.params.facultyID), me = Number(req.faculty.facultyID);
   if (target === me && (canIssue === false || active === false)) {
-    throw new MemberError(409, "You can't remove your own issuing permission or deactivate your own account. Ask another administrator.");
+    throw new HttpError(409, "You can't remove your own issuing permission or deactivate your own account. Ask another administrator.");
   }
   const client = await pool.connect();
   try {
@@ -88,8 +85,8 @@ router.patch("/faculty/members/:facultyID", async (req, res) => {
       `SELECT "facultyID", "canIssue", "deactivatedAt" FROM cict_faculty WHERE "facultyID" = ANY($1::int[])
        ORDER BY "facultyID" FOR UPDATE`, [[...new Set([target, me])]]);
     const caller = rows.find(row => row.facultyID === me);
-    if (!caller?.canIssue || caller.deactivatedAt) throw new MemberError(403, "You are not authorized to manage faculty accounts.");
-    if (!rows.some(row => row.facultyID === target)) throw new MemberError(404, "Faculty account not found.");
+    if (!caller?.canIssue || caller.deactivatedAt) throw new HttpError(403, "You are not authorized to manage faculty accounts.");
+    if (!rows.some(row => row.facultyID === target)) throw new HttpError(404, "Faculty account not found.");
     await client.query(
       `UPDATE cict_faculty SET "canIssue" = COALESCE($2, "canIssue"),
          "deactivatedAt" = CASE WHEN $3::boolean IS NULL THEN "deactivatedAt" WHEN $3 THEN NULL ELSE COALESCE("deactivatedAt", now()) END
@@ -107,7 +104,7 @@ router.patch("/faculty/members/:facultyID", async (req, res) => {
 // For a forgotten password. Your own password is changed in Account settings instead.
 router.post("/faculty/members/:facultyID/reset-password", async (req, res) => {
   if (Number(req.params.facultyID) === Number(req.faculty.facultyID)) {
-    throw new MemberError(409, "Change your own password in Account settings.");
+    throw new HttpError(409, "Change your own password in Account settings.");
   }
   const password = temporaryPassword();
   const hash = await bcrypt.hash(password, 12);
@@ -115,13 +112,13 @@ router.post("/faculty/members/:facultyID/reset-password", async (req, res) => {
     `WITH target AS (UPDATE cict_faculty SET "temporaryPassword" = true WHERE "facultyID" = $1 RETURNING "userID"),
           changed AS (UPDATE users SET "passwordHash" = $2 WHERE "userID" IN (SELECT "userID" FROM target) AND "role" = 'FACULTY' RETURNING "userID")
      SELECT "userID" FROM changed`, [req.params.facultyID, hash]);
-  if (!member) throw new MemberError(404, "Faculty account not found.");
+  if (!member) throw new HttpError(404, "Faculty account not found.");
   res.json({ temporaryPassword: password });
 });
 
 router.use((err, _req, res, next) => {
   if (res.headersSent) return next(err);
-  if (err instanceof MemberError) return res.status(err.status).json({ error: err.message });
+  if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
   console.error("Faculty account management failed:", { code: err.code || "REQUEST_FAILED" });
   res.status(500).json({ error: "Could not load or change faculty accounts. Please try again." });
 });

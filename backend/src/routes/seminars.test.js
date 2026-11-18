@@ -376,5 +376,10 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     assert.match(results.find(result => result.status === 409).data.error, /already checked in/);
     assert.deepEqual((await search("ana")).data.map(row => row.attended), [true]);
     assert.deepEqual((await search("juan")).data.map(row => row.attended), [false]);
+
+    // Undo a check-in, then check the same student in again.
+    assert.deepEqual((await request("PATCH", `/${id}/registrations/2`, { attended: false })).data, { studentID: 2, attended: false });
+    assert.deepEqual((await search("ana")).data.map(row => row.attended), [false]);
+    assert.equal((await checkIn(2)).status, 200);
   });
 });

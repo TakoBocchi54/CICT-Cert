@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { AUTH_CONNECTION, WALLET_CONNECTORS } from '@web3auth/modal';
-import { useWeb3AuthConnect, useWeb3AuthDisconnect } from '@web3auth/modal/react';
+import { useWeb3Auth, useWeb3AuthConnect, useWeb3AuthDisconnect } from '@web3auth/modal/react';
 import { useStudentSession } from '../hooks/useStudentSession';
 import { Lockup, Rosette, Certificate, Btn } from '../components/design-system';
 import ConsentDialog from '../components/ConsentDialog';
@@ -20,24 +19,25 @@ const SAMPLE_CERT = {
 };
 
 export default function LoginPage({ onLogin, needsWalletSetup = false }) {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hasLoggedIn, setHasLoggedIn] = useState(false);
-  const [manualDisconnect, setManualDisconnect] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
 
   // Web3Auth hooks for student login
   const { connectTo, loading: web3Loading, error: web3Error } = useWeb3AuthConnect();
   const { disconnect } = useWeb3AuthDisconnect();
+  const { isConnected } = useWeb3Auth();
   const studentAttempt = useRef(0);
   const facultyRequest = useRef(null);
+  // Only after the button is clicked: a Web3Auth connection left over from a failed sign-out
+  // would otherwise sign the previous student back in as soon as this page loads.
+  const [studentClicked, setStudentClicked] = useState(false);
   const studentSession = useStudentSession({
-    enabled: role === 'student',
+    enabled: role === 'student' && (studentClicked || needsWalletSetup),
   });
 
   useEffect(() => {
@@ -54,34 +54,10 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     }
   }, [role, studentSession.status, disconnect]);
 
-  // Handle disconnect on mount if disconnect=true in URL
-  useEffect(() => {
-    const shouldDisconnect = searchParams.get('disconnect') === 'true';
-    if (shouldDisconnect) {
-      setManualDisconnect(true);
-      setHasLoggedIn(false);
-      disconnect();
-      // Clear the URL parameter
-      setSearchParams({});
-    }
-  }, [searchParams, disconnect, setSearchParams]);
-
-  // Watch for student session changes and auto-login when ready (only once)
-  useEffect(() => {
-    
-    // NEVER auto-login, only login after explicit button click
-    // Just show errors if they occur
-    if (studentSession.status === 'error') {
-      console.error('Student session error:', studentSession.error);
-      setError(studentSession.error || 'Failed to verify your session');
-    }
-  }, [studentSession.status, studentSession.error]);
-
-  // Handle student Web3Auth login
+  // Handle student Web3Auth login. Session errors show straight from studentSession.error.
   const handleStudentLogin = async () => {
     const attemptId = ++studentAttempt.current;
     setError('');
-    setManualDisconnect(false);
     setLoading(true);
 
     if (studentSession.status === 'error') {
@@ -91,7 +67,11 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     }
 
     try {
-      // Connect to Web3Auth
+      // Always ask Google: a remembered connection may belong to whoever used this computer before.
+      // Disconnect before enabling the session, so the old connection is never used.
+      if (isConnected) await disconnect();
+      if (attemptId !== studentAttempt.current) return;
+      setStudentClicked(true);
       // Straight to Google's account picker; Web3Auth's own login modal is skipped.
       const connection = await connectTo(WALLET_CONNECTORS.AUTH, { authConnection: AUTH_CONNECTION.GOOGLE });
       

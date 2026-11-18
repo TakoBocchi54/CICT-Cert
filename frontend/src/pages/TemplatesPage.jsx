@@ -7,7 +7,6 @@ import { useCertificateTemplates } from '../hooks/useCertificateTemplates';
 import TemplateEditor from '../components/TemplateEditor';
 
 const MAX_TEMPLATE_MB = 5;
-const SIZES = 'A4 (3508×2480 or 1754×1240 px) or US Letter (3300×2550 or 1650×1275 px), landscape or portrait';
 
 // Shared library of certificate designs: an uploaded background with the certificate's fields placed on it.
 export default function TemplatesPage() {

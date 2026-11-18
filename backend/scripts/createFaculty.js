@@ -8,8 +8,9 @@ if (!email || !password || !firstName || !lastName) {
   console.error('Usage: node scripts/createFaculty.js <email> <password> <firstName> <lastName> [canIssue=true|false]');
   process.exit(1);
 }
-if (password.length < 8) {
-  console.error("Password must be at least 8 characters.");
+// Same rule as changing a password in Account settings (bcrypt ignores bytes past 72).
+if (password.length < 12 || Buffer.byteLength(password, "utf8") > 72) {
+  console.error("Password must be at least 12 characters (maximum 72 UTF-8 bytes).");
   process.exit(1);
 }
 

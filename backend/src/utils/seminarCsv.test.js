@@ -15,6 +15,9 @@ test("identical duplicate emails are skipped, conflicting profiles are rejected"
   const duplicate = header + "\nJuan,A,BSCS,juan@gmail.com,09171234567\nJuan,B,BSCS,JUAN@GMAIL.COM,09171234567";
   assert.equal(readRegistrationCsv(duplicate).duplicatesSkipped, 1);
   assert.throws(() => readRegistrationCsv(duplicate.replace("Juan,B", "Pedro,B")), /conflicting/);
+  // The same number written differently is still the same; a different number is a conflict, not "last row wins".
+  assert.equal(readRegistrationCsv(duplicate.replace(/09171234567$/, "0917 123 4567")).duplicatesSkipped, 1);
+  assert.throws(() => readRegistrationCsv(duplicate.replace(/09171234567$/, "09998887777")), /conflicting/);
 });
 test("registration CSV rejects malformed, empty, oversized or invalid input", () => {
   for (const csv of [undefined, {}, "", header, "a,b,c\nJuan,BSCS,email", "full_name,program,google_account,google_account,contact_number\nJuan,BSCS,a@gmail.com,b@gmail.com,09171234567",
