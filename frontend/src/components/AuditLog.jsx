@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Btn } from './design-system';
 import { formatCertificateNo } from '../lib/certificateNumber';
 
 const PAGE = 50;
+// Entries shown before the list scrolls.
+const VISIBLE = 6;
 
 // Same groups as ?kind= in backend/src/routes/auditLog.js.
 const FILTERS = [['', 'All'], ['certificates', 'Certificates'], ['attendance', 'Attendance'], ['seminars', 'Seminars'],
@@ -115,7 +117,7 @@ function Entry({ row }) {
   const { verb, icon, tone } = describe(row.action, row.details);
   const chips = [...idChips(row), ...detailChips(row.details, row.certificateDates)];
   return (
-    <li className="flex gap-4 px-5 py-4 sm:px-6 hover:bg-paper">
+    <li data-entry className="flex gap-4 px-5 py-4 sm:px-6 hover:bg-paper">
       <span className={'mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ' + TONES[tone]} aria-hidden="true">
         <i className={'ph-bold ' + icon}></i>
       </span>
@@ -176,6 +178,23 @@ export default function AuditLog() {
   const rows = log.data?.pages.flat() ?? [];
   const filtered = q || kind;
 
+  // Entries differ in height (chips, reasons), so cap the list at the bottom of the sixth one.
+  const scroller = useRef(null);
+  const [maxHeight, setMaxHeight] = useState();
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const measure = () => {
+      const entries = element.querySelectorAll('[data-entry]');
+      const last = entries[VISIBLE - 1];
+      setMaxHeight(entries.length > VISIBLE ? last.offsetTop + last.offsetHeight : undefined);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [log.data]);
+  useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0; }, [q, kind]);
+
   return (
     <div>
       <section className="sheet overflow-hidden" aria-labelledby="audit-title">
@@ -215,17 +234,20 @@ export default function AuditLog() {
           </div>
         ) : (
           <div className={log.isPlaceholderData ? 'opacity-60 transition-opacity' : 'transition-opacity'} aria-busy={log.isFetching}>
-            {byDay(rows).map(day => (
-              <section key={day.key} aria-label={day.label}>
-                <h3 className="eyebrow border-b border-[var(--line)] bg-paper-2 px-5 py-2.5 sm:px-6">{day.label}</h3>
-                <ol className="divide-y divide-[var(--line)]">{day.rows.map(row => <Entry key={row.auditID} row={row} />)}</ol>
-              </section>
-            ))}
+            <div ref={scroller} className="relative overflow-y-auto overscroll-contain" style={{ maxHeight }}
+              tabIndex={maxHeight ? 0 : undefined} aria-label={maxHeight ? 'Audit log entries, scrollable' : undefined}>
+              {byDay(rows).map(day => (
+                <section key={day.key} aria-label={day.label}>
+                  <h3 className="eyebrow sticky top-0 z-10 border-b border-[var(--line)] bg-paper-2 px-5 py-2.5 sm:px-6">{day.label}</h3>
+                  <ol className="divide-y divide-[var(--line)]">{day.rows.map(row => <Entry key={row.auditID} row={row} />)}</ol>
+                </section>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] bg-paper px-5 py-4 sm:px-6">
               <p className="text-sm text-ink-muted tabular-nums" role="status">{rows.length} {rows.length === 1 ? 'entry' : 'entries'} shown</p>
               {log.hasNextPage ? <Btn variant="line" size="sm" icon={log.isFetchingNextPage ? undefined : 'ph-caret-down'} disabled={log.isFetchingNextPage}
                 onClick={() => log.fetchNextPage()}>{log.isFetchingNextPage ? 'Loading...' : 'Load older entries'}</Btn>
-                : <p className="text-sm text-ink-muted">You've reached the first entry.</p>}
+                : <p className="text-sm text-ink-muted"></p>}
             </div>
           </div>
         )}
