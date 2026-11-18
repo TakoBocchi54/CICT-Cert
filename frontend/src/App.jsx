@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { api } from './lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWeb3Auth } from '@web3auth/modal/react';
 import TopNav from './components/TopNav';
 import LoginPage from './pages/LoginPage';
@@ -31,6 +31,7 @@ function AppContent() {
   const [sessionError, setSessionError] = useState(null);
   const [selectedCertId, setSelectedCertId] = useState(null);
   const { web3Auth, isConnected } = useWeb3Auth();
+  const queryClient = useQueryClient();
   const studentCertificates = useQuery({
     queryKey: ['student-certificates', user?.studentID],
     queryFn: ({ signal }) => api('/api/student/certificates', { signal }),
@@ -87,7 +88,9 @@ function AppContent() {
 
   const needsWalletSetup = user?.role === 'student' && !user.walletAddress;
 
-  const handleLogin = (role, userData) => {    
+  const handleLogin = (role, userData) => {
+    // Cached queries (e.g. ["faculty-me"]) belong to whoever was signed in before.
+    queryClient.clear();
     // Backend returns different data for faculty and student
     if (role === 'faculty') {
       // Faculty response: { facultyID, firstName, lastName, canIssue }
@@ -128,6 +131,7 @@ function AppContent() {
       setSelectedCertId(null);
 
       navigate('/login', {replace: true});
+      queryClient.clear();
     } catch (err) {
       console.error('Sign-out failed:', err.message);
       window.alert('Sign-out failed. Please try again.');
