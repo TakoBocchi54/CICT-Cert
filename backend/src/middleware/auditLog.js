@@ -14,6 +14,7 @@ const SKIPPED = /\/(attendance\/preview|issuance\/check|revocation\/check)$/;
 const SEMINAR = ["seminarTitle", "seminarDate", "venue", "registrationClosesAt", "templateID"];
 const DETAILS = [
   [/^(POST \/faculty\/seminars|PATCH \/faculty\/seminars\/:id)$/, SEMINAR],
+  [/^PUT \/faculty\/seminars\/:id\/template$/, ["templateID"]],
   [/^PATCH \/faculty\/seminars\/:id\/registrations\/:id$/, ["attended"]],
   [/^PATCH \/faculty\/seminars\/:id\/certificates\/:id$/, ["recipientName"]],
   [/^POST \/faculty\/certificates\/revoke$/, ["certificateNos", "reason"]],

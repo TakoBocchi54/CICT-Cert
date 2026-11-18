@@ -142,6 +142,17 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     assert.deepEqual([listed.templateID, listed.templateName], [templateID, "Gold"]);
     assert.equal((await request("PATCH", "/" + id, { seminarTitle: "Designed 2", seminarDate: "2026-11-12", templateID: null })).data.templateID, null);
     assert.equal((await request("POST", "", { seminarTitle: "Plain", venue: "AVR", seminarDate: "2026-11-12" })).data.templateID, null);
+
+    // The Issue wizard's Review step sets the design on its own (issuance permission required).
+    const issuerCookie = await cookie("FACULTY", "1", "1");
+    const setDesign = (value, session = issuerCookie, seminar = id) => request("PUT", `/${seminar}/template`, { templateID: value }, session);
+    assert.equal((await setDesign(templateID, facultyCookie)).status, 403);
+    for (const bad of [42, "abc", "0"]) assert.equal((await setDesign(bad)).status, 400);
+    assert.match((await setDesign("999")).data.error, /no longer exists/);
+    assert.equal((await setDesign(templateID, issuerCookie, "999999")).status, 404);
+    const chosen = await setDesign(templateID);
+    assert.deepEqual([chosen.status, chosen.data.templateID, chosen.data.seminarTitle], [200, templateID, "Designed 2"]);
+    assert.equal((await setDesign(null)).data.templateID, null);
   });
 
   const attendanceSeminar = await request("POST", "", { seminarTitle: "Attendance test", venue: "AVR", seminarDate: "2026-11-15" });
@@ -301,6 +312,7 @@ test("seminar and attendance HTTP endpoints with PostgreSQL", { skip: !local && 
     const issuerCookie = await cookie("FACULTY", "1", "1");
     assert.equal((await request("PATCH", "/" + attendanceID, { seminarTitle: "Renamed", seminarDate: "2026-11-15" })).status, 409);
     assert.equal((await request("DELETE", "/" + attendanceID, undefined, issuerCookie)).status, 409);
+    assert.match((await request("PUT", `/${attendanceID}/template`, { templateID: null }, issuerCookie)).data.error, /design can no longer be changed/);
     const listed = (await request()).data.find(row => row.seminarID === attendanceID);
     assert.equal(listed.seminarTitle, "Attendance test");
     assert.ok(listed.certificateCount >= 2);

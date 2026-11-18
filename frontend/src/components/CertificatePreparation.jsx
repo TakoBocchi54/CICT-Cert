@@ -6,12 +6,13 @@ import { api } from '../lib/api';
 import { useFacultyMe } from '../hooks/useFacultyMe';
 import { certificateProgress } from '../lib/certificateProgress';
 import { formatCertificateNo } from '../lib/certificateNumber';
+import TemplatePicker from './TemplatePicker';
 
 const count = (n, noun = 'certificate') => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 // mode 'review': prepare certificates and check the list (names can be corrected). mode 'issue': mint every ready certificate in batches.
 // onDone: where the Done button goes once everything issuable is issued (issue mode). Issue/Done render into actionSlot, the wizard footer.
-export default function CertificatePreparation({ seminarID, attendanceCount, disabled, mode, onDone, actionSlot }) {
+export default function CertificatePreparation({ seminarID, attendanceCount, seminar, disabled, mode, onDone, actionSlot }) {
   const queryClient = useQueryClient();
   const faculty = useFacultyMe();
   const [reviewingIssuance, setReviewingIssuance] = useState(false);
@@ -38,6 +39,11 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
   const refreshList = () => queryClient.invalidateQueries({ queryKey: ['seminar-certificates', seminarID] });
   const refresh = () => Promise.all([refreshList(), queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] })]);
   const prepare = useMutation({ mutationFn: () => api(base + '/prepare', { method: 'POST' }), onSuccess: refresh });
+  // The certificate design is chosen here, before Prepare; certificates render with it, so it locks once any exist.
+  const design = useMutation({
+    mutationFn: templateID => api(`/api/faculty/seminars/${seminarID}/template`, { method: 'PUT', body: { templateID: templateID || null } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] }),
+  });
   const rename = useMutation({
     mutationFn: ({ id, name }) => api(`${base}/${id}`, { method: 'PATCH', body: { recipientName: name } }),
     onSuccess: () => { setEditing(null); return refreshList(); },
@@ -69,7 +75,8 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
   });
   const check = useMutation({ mutationFn: () => api(base + '/issuance/check', { method: 'POST' }), onSuccess: refresh });
   const canIssue = !!faculty.data?.canIssue;
-  const busy = disabled || prepare.isPending || issue.isPending || check.isPending || rename.isPending;
+  const busy = disabled || prepare.isPending || issue.isPending || check.isPending || rename.isPending || design.isPending;
+  const designLocked = !!certificates.data?.length;
   const unissued = certificate => ['PENDING', 'FAILED'].includes(certificate.status) && certificate.transactionStatus !== 'PENDING';
   const ready = certificates.data?.filter(certificate => unissued(certificate) && certificate.attended && certificate.walletConnected) || [];
   const pending = certificates.data?.some(certificate => certificate.transactionStatus === 'PENDING');
@@ -153,6 +160,13 @@ export default function CertificatePreparation({ seminarID, attendanceCount, dis
       </div>}
     </div>}
     {mode === 'review' && <>
+      {seminar && <div className="mt-6 max-w-md">
+        <TemplatePicker id={`seminar-design-${seminarID}`} value={String(seminar.templateID ?? '')}
+          disabled={busy || !canIssue || designLocked || certificates.isPending}
+          hint={designLocked ? 'Locked: certificates are already prepared with this design.' : undefined}
+          onChange={value => { design.reset(); design.mutate(value); }} />
+        {design.error && <p role="alert" className="mt-2 text-sm text-revoked">{design.error.message}</p>}
+      </div>}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Btn variant={certificates.data?.length ? 'line' : 'primary'} icon="ph-stack" disabled={busy || !canIssue} onClick={() => prepare.mutate()}
           title="Creates a numbered certificate for each attendee. Run again after marking more attendees; nothing is minted.">

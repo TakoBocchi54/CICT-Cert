@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
 import { useSessionDraft } from '../lib/sessionDraft';
-import { useFacultyMe } from '../hooks/useFacultyMe';
 import CsvDropZone from './CsvDropZone';
 import { readCsvFile } from '../lib/csvFile';
 import DoneCard from './DoneCard';
@@ -15,7 +14,6 @@ import DoneCard from './DoneCard';
 // The hidden input #attendance-file-<seminarID> lets an outside button open the file picker directly; onFile runs once a file is read.
 export default function AttendanceImport({ seminarID, attendanceCount, disabled, onSaved, actionSlot, onContinue, onFile }) {
   const queryClient = useQueryClient();
-  const faculty = useFacultyMe();
   const [draft, setDraft] = useSessionDraft('cict-attendance-' + seminarID);
   const [fileError, setFileError] = useState('');
   const [correcting, setCorrecting] = useState(false);
@@ -28,14 +26,11 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
   const reviewDraft = (aliases = draft.aliases) => { save.reset(); review.mutate({ csv: draft.csv, aliases }); };
   const save = useMutation({
     mutationFn: async () => {
+      // Certificates are prepared in the Review step, after the certificate design is chosen there.
       const attendance = await api('/api/faculty/seminars/' + seminarID + '/attendance/import', {
         method: 'POST', body: { csv: draft.csv, previewHash: draft.preview.previewHash, aliases: draft.aliases },
       });
-      // Attendance is saved at this point; a failed preparation is reported, not thrown.
-      if (!faculty.data?.canIssue) return { attendance };
-      try {
-        return { attendance, prepared: await api(`/api/faculty/seminars/${seminarID}/certificates/prepare`, { method: 'POST' }) };
-      } catch (err) { return { attendance, prepareError: err.message }; }
+      return { attendance };
     },
     onSuccess: async result => {
       setDraft(null);
@@ -115,7 +110,7 @@ export default function AttendanceImport({ seminarID, attendanceCount, disabled,
       </div>}
       {actionSlot && createPortal(preview
         ? <Btn disabled={busy || !preview.canSave} iconRight="ph-arrow-right" onClick={() => { if (!busy && preview.canSave) save.mutate(); }}>
-          {save.isPending ? 'Saving attendance...' : faculty.data?.canIssue ? 'Confirm attendance and prepare certificates' : 'Confirm attendance'}
+          {save.isPending ? 'Saving attendance...' : 'Confirm attendance'}
         </Btn>
         : onContinue ? <Btn iconRight="ph-arrow-right" onClick={onContinue}>Continue to Review</Btn>
           // Attendance-only faculty: the wizard ends here (see IssuancePage).

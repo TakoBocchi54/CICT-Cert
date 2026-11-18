@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
-import TemplatePicker from './TemplatePicker';
 import { inputToDeadline } from '../lib/registrationLink';
 
 // Create a seminar; its registration link is ready to share as soon as it is saved.
@@ -14,12 +13,11 @@ export default function NewSeminarDialog({ onClose, onCreated }) {
   const [date, setDate] = useState('');
   const [venue, setVenue] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [templateID, setTemplateID] = useState('');
 
   useEffect(() => { dialog.current.showModal(); }, []);
 
   const create = useMutation({
-    mutationFn: () => api('/api/faculty/seminars', { method: 'POST', body: { seminarTitle: title, seminarDate: date, templateID: templateID || null,
+    mutationFn: () => api('/api/faculty/seminars', { method: 'POST', body: { seminarTitle: title, seminarDate: date,
       venue, registrationClosesAt: inputToDeadline(deadline) } }),
     onSuccess: async seminar => { await queryClient.invalidateQueries({ queryKey: ['faculty-seminars'] }); onCreated(seminar); },
   });
@@ -63,7 +61,6 @@ export default function NewSeminarDialog({ onClose, onCreated }) {
               <label htmlFor="seminar-deadline" className="eyebrow mb-2 block">Registration deadline</label>
               <input id="seminar-deadline" className="field" type="datetime-local" required value={deadline} onChange={edit(setDeadline)} />
             </div>
-            <TemplatePicker id="seminar-template" value={templateID} onChange={value => { create.reset(); setTemplateID(value); }} />
             {create.error && <p role="alert" className="text-sm text-revoked">{create.error.message}</p>}
             <div className="flex gap-3 pt-2">
               <Btn type="button" variant="line" className="flex-1" onClick={onClose}>Cancel</Btn>

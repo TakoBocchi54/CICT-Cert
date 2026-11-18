@@ -58,7 +58,16 @@ router.get("/faculty/seminars", async (_req, res) => {
   res.json(rows);
 });
 
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+// Certificate design: null (or absent) = built-in; otherwise an existing template's ID.
+function readTemplateID(value) {
+  const templateID = value ?? null;
+  if (templateID !== null && (!["string", "number"].includes(typeof templateID) || !/^[1-9]\d{0,9}$/.test(String(templateID)) || BigInt(templateID) > 2147483647n)) {
+    return { error: "Choose a valid certificate design." };
+  }
+  return { templateID };
+}
+
+const ISO_TIMESTAMP =/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 // Returns { title, date, templateID, venue, closesAt } or { error } for a create/edit request body.
 // The venue is required, except that an edit may leave it out to keep the current one.
@@ -72,11 +81,8 @@ function readSeminarFields(body, { editing = false } = {}) {
       !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
     return { error: "Enter a valid seminar date in YYYY-MM-DD format." };
   }
-  // Certificate design: null (or absent) = built-in; otherwise an existing template's ID.
-  const templateID = body?.templateID ?? null;
-  if (templateID !== null && (!["string", "number"].includes(typeof templateID) || !/^[1-9]\d{0,9}$/.test(String(templateID)) || BigInt(templateID) > 2147483647n)) {
-    return { error: "Choose a valid certificate design." };
-  }
+  const { templateID, error } = readTemplateID(body?.templateID);
+  if (error) return { error };
   const venue = typeof body?.venue === "string" ? body.venue.trim() : body?.venue;
   if (!(editing && venue === undefined) && (typeof venue !== "string" || !venue || venue.length > 255 || /[\u0000-\u001f\u007f]/.test(venue))) {
     return { error: "Enter a venue containing 1–255 characters." };
@@ -155,6 +161,25 @@ router.patch("/faculty/seminars/:seminarID", async (req, res) => {
          "registrationClosesAt" = CASE WHEN $9 THEN "registrationClosesAt" ELSE $8::timestamptz END
        WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
       [req.params.seminarID, title, date, templateID, keepTemplate, venue, keep("venue"), closesAt, keep("registrationClosesAt")])).rows[0];
+  });
+});
+
+// The certificate design is chosen in the Issue wizard's Review step. Certificates render with the seminar's current
+// design, so it is fixed once any certificate exists; the seminar row lock serializes this with prepare.
+router.put("/faculty/seminars/:seminarID/template", requireCanIssue, async (req, res) => {
+  const { templateID, error } = readTemplateID(req.body?.templateID);
+  if (error) return res.status(400).json({ error });
+  await changeLockedSeminar(req.params.seminarID, res, async client => {
+    if ((await client.query(`SELECT 1 FROM certificate WHERE "seminarID" = $1 LIMIT 1`, [req.params.seminarID])).rowCount) {
+      throw new IssuanceError(409, "Certificates have already been prepared for this seminar, so its design can no longer be changed.");
+    }
+    // FOR SHARE keeps the chosen template from being deleted before this commits.
+    if (templateID !== null && !(await client.query(
+      `SELECT 1 FROM certificate_template WHERE "templateID" = $1 FOR SHARE`, [templateID])).rowCount) {
+      throw new IssuanceError(400, MISSING_TEMPLATE);
+    }
+    return (await client.query(`UPDATE seminar SET "templateID" = $2 WHERE "seminarID" = $1 RETURNING ${SEMINAR_COLUMNS}`,
+      [req.params.seminarID, templateID])).rows[0];
   });
 });
 

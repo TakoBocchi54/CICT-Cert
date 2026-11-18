@@ -177,10 +177,8 @@ export default function IssuancePage({ onNavigateRegistry, onNavigateSeminars })
               <section hidden={current !== 2} className="flex-1 fade-view">
                 {attendanceResult && <div role="status" className="mb-6 rounded-xl bg-verified-bg p-4 text-sm text-verified">
                   Attendance saved: {attendanceResult.attendance.attended} attended, {attendanceResult.attendance.markedAbsent} marked absent.
-                  {attendanceResult.prepared && ` ${attendanceResult.prepared.prepared} certificates prepared; ${attendanceResult.prepared.awaitingWallet} attendees still need a wallet.`}
-                  {attendanceResult.prepareError && <span className="block text-revoked">Certificates were not prepared: {attendanceResult.prepareError} Use Prepare certificates below.</span>}
                 </div>}
-                <CertificatePreparation mode="review" seminarID={selected.seminarID} attendanceCount={selected.attendanceCount} />
+                <CertificatePreparation mode="review" seminarID={selected.seminarID} attendanceCount={selected.attendanceCount} seminar={selected} />
               </section>
               <section hidden={current !== 3} className="flex flex-1 flex-col fade-view">
                 <CertificatePreparation mode="issue" seminarID={selected.seminarID} onDone={onNavigateRegistry} actionSlot={current === 3 ? actionSlot : null} />

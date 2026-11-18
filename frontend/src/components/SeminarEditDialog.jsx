@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Btn } from './design-system';
 import { api } from '../lib/api';
-import TemplatePicker from './TemplatePicker';
 import { deadlineToInput, inputToDeadline } from '../lib/registrationLink';
 
 // Fix a mistaken seminar (typo in title or date), or delete it, before any certificate copies its details.
@@ -12,7 +11,6 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   const dialog = useRef(null);
   const [title, setTitle] = useState(seminar.seminarTitle);
   const [date, setDate] = useState(seminar.seminarDate);
-  const [templateID, setTemplateID] = useState(String(seminar.templateID ?? ''));
   const [venue, setVenue] = useState(seminar.venue ?? '');
   const [deadline, setDeadline] = useState(deadlineToInput(seminar.registrationClosesAt));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -22,7 +20,7 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   useEffect(() => { dialog.current.showModal(); }, []);
 
   const save = useMutation({
-    mutationFn: () => api(`/api/faculty/seminars/${seminar.seminarID}`, { method: 'PATCH', body: { seminarTitle: title, seminarDate: date, templateID: templateID || null,
+    mutationFn: () => api(`/api/faculty/seminars/${seminar.seminarID}`, { method: 'PATCH', body: { seminarTitle: title, seminarDate: date,
       venue, ...(deadlineChanged && { registrationClosesAt: inputToDeadline(deadline) }) } }),
     onSuccess: async () => { await refresh(); onClose(); },
   });
@@ -33,7 +31,7 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
   const busy = save.isPending || remove.isPending;
   // The deadline input has minute precision, so it is sent only when edited (closing early stores seconds).
   const deadlineChanged = deadline !== deadlineToInput(seminar.registrationClosesAt);
-  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate && templateID === String(seminar.templateID ?? '')
+  const unchanged = title.trim() === seminar.seminarTitle && date === seminar.seminarDate
     && venue.trim() === (seminar.venue ?? '') && !deadlineChanged;
   const [heading, icon, tone] = locked ? ['Seminar locked', 'ph-lock-simple', 'bg-paper-2 text-ink-muted']
     : confirmingDelete ? ['Delete this seminar?', 'ph-warning', 'bg-revoked-bg text-revoked']
@@ -105,7 +103,6 @@ export default function SeminarEditDialog({ seminar, canDelete, onClose, onDelet
                 <input id="edit-seminar-deadline" className="field" type="datetime-local"
                   value={deadline} onChange={event => { save.reset(); setDeadline(event.target.value); }} />
               </div>
-              <TemplatePicker id="edit-seminar-template" value={templateID} onChange={value => { save.reset(); setTemplateID(value); }} />
               {save.error && <p role="alert" className="text-sm text-revoked">{save.error.message}</p>}
               <div className="flex gap-3 pt-2">
                 <Btn type="button" variant="line" className="flex-1" onClick={onClose}>Cancel</Btn>
