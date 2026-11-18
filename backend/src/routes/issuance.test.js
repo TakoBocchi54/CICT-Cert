@@ -55,6 +55,15 @@ test("batch issuance with PostgreSQL and a local Amoy RPC fixture", { skip }, as
     assert.deepEqual(await counts(empty.seminarID), [0, 0, 0]);
   });
 
+  await t.test("unpreparedCount counts attendees Prepare would still create a certificate for", async () => {
+    const { seminarID, certificates } = await preparedSeminar(db, [1, 2]);
+    const unprepared = async () => (await send("GET", "/faculty/seminars")).data.find(row => row.seminarID === seminarID).unpreparedCount;
+    // A certificate in any status counts (the query has no status filter), so a revoked one doesn't hold Review open.
+    assert.equal(await unprepared(), 0);
+    await db.query(`DELETE FROM certificate WHERE "certificateID" = $1`, [certificates[1].certificateID]);
+    assert.equal(await unprepared(), 1);
+  });
+
   await t.test("requires a live authorized faculty account and an existing seminar", async () => {
     const { seminarID } = await preparedSeminar(db, [1]);
     for (const session of ["", student1, await sessionCookie("FACULTY", "999", "999")]) assert.equal((await issue(seminarID, session)).status, 401);

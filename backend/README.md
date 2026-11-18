@@ -242,6 +242,14 @@ In-app notifications have no events table. `GET /api/notifications` (student or 
 
 `issuer_wallet."lowBalanceSince"` is set when the balance is first seen below the threshold (on the dashboard or in notifications) and cleared once it is above again, so the low-balance item keeps its time and a later drop is a new item. `GET /api/faculty/certificates/issuer-wallet` also returns `threshold` and `low`. There is no email or push; everything is in the app.
 
+## Audit log (migration 012)
+
+`audit_log` records every successful faculty change (POST/PATCH/PUT/DELETE under `/api/faculty/`), written by `middleware/auditLog.js`, which is mounted once in `app.js` and needs no change in the routes. It is written when the route sends its response, so a change is recorded even if the browser left first (for example during a slow issuance). Not recorded: `.../attendance/preview` (changes nothing) and the polled `.../issuance/check` and `.../revocation/check` (they only re-check a transaction whose issue or revoke is already recorded). A row holds the time, the actor's id, name and email at that moment (no foreign key, so history outlives the account), the action (`METHOD /route` with numeric ids replaced by `:id`, for example `POST /faculty/seminars/:id/certificates/issue`), the numeric ids from the URL, and `details`: only the fields that action uses (seminar fields for seminar create/edit, `attended`, `recipientName`, `certificateNos` and `reason` for revokes, the replacement's facts, a template's `name`), strings cut to 300 characters and lists to 200 items. CSVs, passwords, contact numbers and images are never stored. A trigger rejects UPDATE and DELETE; `scripts/resetTestData.js` deliberately leaves the table alone. Logins and student actions are not recorded.
+
+`GET /api/faculty/audit-log` (`canIssue` only) returns rows newest first. `?limit` (1-100, default 50), `?before=<auditID>` continues after the last row of the previous page, `?q=` matches the actor's name or email or the action, and `?kind=` (`certificates`, `attendance`, `seminars`, `students`, `account`) keeps one group of actions (400 for any other value). The page is `frontend/src/pages/AuditLogPage.jsx`, opened from the account menu (shown only to `canIssue`).
+
+shortcut: the row is written just after the response is sent, so a write failure or a crash at that instant loses one entry (the failure is logged). Move the insert into each route's transaction if the log must be lossless.
+
 ## Checks
 
 ```powershell

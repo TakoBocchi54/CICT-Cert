@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Lockup, Btn } from './design-system';
 import NotificationBell from './NotificationBell';
+import { useFacultyMe } from '../hooks/useFacultyMe';
 
 export default function TopNav({ role, view, onNavigate, onSignOut, userName, userTitle }) {
   const [menu, setMenu] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
 
+  const canIssue = useFacultyMe({ enabled: role === 'faculty' }).data?.canIssue;
   const items =
     role === 'faculty'
       ? [
@@ -108,6 +110,17 @@ export default function TopNav({ role, view, onNavigate, onSignOut, userName, us
                       >
                         <i className="ph-bold ph-user-circle" aria-hidden="true"></i>
                         Account settings
+                      </button>
+                    )}
+                    {role === 'faculty' && canIssue && (
+                      <button
+                        role="menuitem"
+                        onClick={() => { setMenu(false); onNavigate('faculty-audit'); }}
+                        aria-current={view === 'faculty-audit' ? 'page' : undefined}
+                        className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-paper-2"
+                      >
+                        <i className="ph-bold ph-clock-counter-clockwise" aria-hidden="true"></i>
+                        Audit log
                       </button>
                     )}
                     <button

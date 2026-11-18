@@ -42,6 +42,9 @@ router.get("/faculty/seminars", async (_req, res) => {
            s."registrationClosesAt", coalesce(s."registrationClosesAt" > now(), false) AS "registrationOpen",
            count(r."studentID")::int AS "registrationCount",
            count(r."studentID") FILTER (WHERE r."attended")::int AS "attendanceCount",
+           -- Attendees Prepare would still create a certificate for (same test as prepare: none in any status).
+           count(r."studentID") FILTER (WHERE r."attended" AND NOT EXISTS (SELECT 1 FROM certificate c
+             WHERE c."seminarID" = r."seminarID" AND c."studentID" = r."studentID"))::int AS "unpreparedCount",
            count(w."studentWalletID")::int AS "walletCount",
            coalesce(certs."readyCount", 0) AS "readyCount", coalesce(certs."awaitingCount", 0) AS "awaitingCount",
            coalesce(certs."issuedCount", 0) AS "issuedCount", coalesce(certs."certificateCount", 0) AS "certificateCount"

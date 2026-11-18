@@ -16,6 +16,8 @@ import studentRoutes from "./routes/students.js";
 import templateRoutes from "./routes/templates.js";
 import registrationRoutes from "./routes/registration.js";
 import notificationRoutes from "./routes/notifications.js";
+import auditLogRoutes from "./routes/auditLog.js";
+import { auditLog } from "./middleware/auditLog.js";
 
 const app = express();
 // Render and Vercel each sit in front of this app; without this every client shares the proxy's IP in the rate limiters.
@@ -25,6 +27,7 @@ app.set("trust proxy", 2);
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+app.use(auditLog);
 
 app.use("/api", healthRoutes);
 app.use("/api", authSessionRoutes);
@@ -41,5 +44,6 @@ app.use("/api", studentRoutes);
 app.use("/api", templateRoutes);
 app.use("/api", registrationRoutes);
 app.use("/api", notificationRoutes);
+app.use("/api", auditLogRoutes);
 
 export default app;

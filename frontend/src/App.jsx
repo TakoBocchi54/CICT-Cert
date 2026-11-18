@@ -14,6 +14,7 @@ import FacultyDashboardPage from './pages/FacultyDashboardPage';
 import IssuancePage from './pages/IssuancePage';
 import RevocationPage from './pages/RevocationPage';
 import StudentsPage from './pages/StudentsPage';
+import AuditLogPage from './pages/AuditLogPage';
 import RegistryPage from './pages/RegistryPage';
 import TemplatesPage from './pages/TemplatesPage';
 import SeminarsPage from './pages/SeminarsPage';
@@ -144,6 +145,7 @@ function AppContent() {
       'faculty-students': '/faculty/students',
       'faculty-registry': '/faculty/registry',
       'faculty-templates': '/faculty/templates',
+      'faculty-audit': '/faculty/audit-log',
       'faculty-account': '/faculty/account',
     };
     navigate(routes[view] || '/');
@@ -169,6 +171,7 @@ function AppContent() {
     '/faculty/students': 'faculty-students',
     '/faculty/registry': 'faculty-registry',
     '/faculty/templates': 'faculty-templates',
+    '/faculty/audit-log': 'faculty-audit',
     '/faculty/revocation': 'faculty-registry', // reached from a Registry row
     '/faculty/account': 'faculty-account',
   })[location.pathname] || (location.pathname.startsWith('/student/certificates/') ? 'student-certificates' : '');
@@ -453,6 +456,21 @@ function AppContent() {
             ) : (
               <Navigate to="/login" replace />
             )
+          }
+        />
+
+        <Route
+          path="/faculty/audit-log"
+          element={
+            user?.role === 'faculty' && user.canIssue ? (
+              <>
+                <TopNav role="faculty" view={currentView} onNavigate={handleNavigate}
+                  onSignOut={handleSignOut} userName={user.name} userTitle={user.title} />
+                <main className="max-w-[1280px] mx-auto px-4 pt-10 fade-view" key={pageKey}>
+                  <AuditLogPage />
+                </main>
+              </>
+            ) : <Navigate to={user?.role === 'faculty' ? '/faculty/dashboard' : '/login'} replace />
           }
         />
 

@@ -29,9 +29,9 @@ function stepDone(seminar, index) {
     attendanceCount > 0 && issuedCount >= attendanceCount,
   ][index];
 }
-// Every attendee has a certificate (including ones still waiting on a wallet), so Review is complete.
-const allPrepared = ({ attendanceCount, readyCount, awaitingCount, issuedCount }) =>
-  attendanceCount > 0 && readyCount + awaitingCount + issuedCount >= attendanceCount;
+// Prepare has nothing left to create: every attendee has a certificate in some state (waiting on a wallet, issued, or
+// revoked, which Prepare never recreates; that needs a replacement), so Review is complete.
+const allPrepared = ({ attendanceCount, unpreparedCount }) => attendanceCount > 0 && unpreparedCount === 0;
 const firstOpenStep =seminar => [1, 2, 3].find(index => !stepDone(seminar, index)) ?? 3;
 
 function stepHint(seminar, index) {
