@@ -18,6 +18,15 @@ const SAMPLE_CERT = {
   confirmations: 128
 };
 
+// Google sign-in (redirect mode) reloads this page on the way back. This per-tab mark says the student clicked
+// "Sign in with Google", so the connection that comes back is used instead of cleared as a leftover.
+const GOOGLE_RETURN = 'cict-google-sign-in';
+const readGoogleReturn = () => { try { return sessionStorage.getItem(GOOGLE_RETURN) === '1'; } catch { return false; } };
+const markGoogleReturn = on => {
+  try { if (on) sessionStorage.setItem(GOOGLE_RETURN, '1'); else sessionStorage.removeItem(GOOGLE_RETURN); }
+  catch { /* storage blocked: the student just clicks Sign in again after coming back */ }
+};
+
 export default function LoginPage({ onLogin, needsWalletSetup = false }) {
   const [role, setRole] = useState('student');
   const [email, setEmail] = useState('');
@@ -29,13 +38,14 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
 
   // Web3Auth hooks for student login
   const { connectTo, loading: web3Loading, error: web3Error } = useWeb3AuthConnect();
-  const { disconnect } = useWeb3AuthDisconnect();
-  const { isConnected } = useWeb3Auth();
+  const { disconnect, error: disconnectError } = useWeb3AuthDisconnect();
+  const { isConnected, isInitialized } = useWeb3Auth();
   const studentAttempt = useRef(0);
   const facultyRequest = useRef(null);
-  // Only after the button is clicked: a Web3Auth connection left over from a failed sign-out
-  // would otherwise sign the previous student back in as soon as this page loads.
-  const [studentClicked, setStudentClicked] = useState(false);
+  // Only after the button is clicked (or on the way back from Google): a Web3Auth connection left over from
+  // a failed sign-out would otherwise sign the previous student back in as soon as this page loads.
+  const [studentClicked, setStudentClicked] = useState(readGoogleReturn);
+  useEffect(() => markGoogleReturn(false), []);
   const studentSession = useStudentSession({
     enabled: role === 'student' && (studentClicked || needsWalletSetup),
   });
@@ -54,6 +64,16 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     }
   }, [role, studentSession.status, disconnect]);
 
+  // A Web3Auth connection remembered here may belong to whoever used this computer before, so drop it when
+  // the page opens. The Google button stays disabled until it is gone.
+  const leftoverConnection = isConnected && !studentClicked && !needsWalletSetup;
+  useEffect(() => {
+    if (leftoverConnection) disconnect();
+  }, [leftoverConnection, disconnect]);
+  // Right after sign-out the disconnect above can fail only because Web3Auth is still finishing the
+  // sign-out; that resolves by itself. It is a real problem only if the connection is still there.
+  const stuckConnection = Boolean(disconnectError) && leftoverConnection;
+
   // Handle student Web3Auth login. Session errors show straight from studentSession.error.
   const handleStudentLogin = async () => {
     const attemptId = ++studentAttempt.current;
@@ -67,12 +87,9 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     }
 
     try {
-      // Always ask Google: a remembered connection may belong to whoever used this computer before.
-      // Disconnect before enabling the session, so the old connection is never used.
-      if (isConnected) await disconnect();
-      if (attemptId !== studentAttempt.current) return;
       setStudentClicked(true);
-      // Straight to Google's account picker; Web3Auth's own login modal is skipped.
+      markGoogleReturn(true);
+      // Straight to Google's account picker (this tab leaves for Google); Web3Auth's own login modal is skipped.
       const connection = await connectTo(WALLET_CONNECTORS.AUTH, { authConnection: AUTH_CONNECTION.GOOGLE });
       
       if(attemptId !== studentAttempt.current) return; // Ignore if a new attempt has started
@@ -83,6 +100,7 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     } catch (err) {
       if (attemptId !== studentAttempt.current) return;
 
+      markGoogleReturn(false);
       console.error('Student login error:', err.message);
       setError(err.message || 'Failed to sign in with Google. Please try again.');
       setLoading(false);
@@ -91,8 +109,9 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
 
   // Continue after explicit sign-in or resumed wallet setup.
   useEffect(() => {
-    // Only process student session if we're on student role and actively logging in
-    if (role !== 'student' || (!loading && !needsWalletSetup)) {
+    // Only process student session if we're on student role and actively logging in. studentClicked, not
+    // loading: after the redirect back from Google this page is freshly loaded and loading starts false.
+    if (role !== 'student' || (!studentClicked && !needsWalletSetup)) {
       return;
     }
     
@@ -103,7 +122,7 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
     if (studentSession.status === 'error') {
       setLoading(false);
     }
-  }, [loading, role, needsWalletSetup, studentSession.status, studentSession.student, onLogin]);
+  }, [studentClicked, role, needsWalletSetup, studentSession.status, studentSession.student, onLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -267,10 +286,11 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
                     Students use an embedded wallet to access their credentials. Sign in with your Google account to continue.
                   </p>
                   
-                  {(error || web3Error || studentSession.error) && (
+                  {(error || web3Error || studentSession.error || stuckConnection) && (
                     <div className="rounded-xl bg-revoked-bg border border-revoked/20 p-4 mb-4 text-left">
                       <p className="text-sm text-revoked font-medium">
-                        {studentSession.error || error || web3Error?.message}
+                        {studentSession.error || error || web3Error?.message ||
+                          'Could not clear the previous Google sign-in. Refresh the page and try again.'}
                       </p>
                       {studentSession.error && (
                         <button 
@@ -295,11 +315,13 @@ export default function LoginPage({ onLogin, needsWalletSetup = false }) {
                     className="w-full !py-3.5 !bg-white !text-ink border-2 border-[var(--line)] hover:!bg-paper-2"
                     icon="ph-google-logo"
                     onClick={handleStudentLogin}
-                    disabled={web3Loading || studentSession.status === 'working'}
+                    // Wait until a leftover connection is fully gone (isConnected turns false at the very end).
+                    // Until Web3Auth is ready it may still be reading the answer Google sent back.
+                    disabled={!isInitialized || web3Loading || studentSession.status === 'working' || leftoverConnection}
                   >
                     {studentSession.status === 'working'
                       ? 'Verifying your account...'
-                      : web3Loading
+                      : !isInitialized || web3Loading
                       ? 'Connecting...'
                       : studentSession.status === 'error'
                       ? 'Retry sign in'

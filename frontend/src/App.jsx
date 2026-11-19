@@ -26,6 +26,9 @@ function AppContent() {
   const location = useLocation();
   // Pages read ?seminar= when they mount, so a notification link to the page already open remounts it.
   const pageKey = location.pathname + (location.state?.fromNotification ? location.key : '');
+  // Keep ?query and #hash: Google sign-in (redirect mode) returns to the page Web3Auth loaded on, e.g. "/",
+  // with its answer in the URL, and dropping it here would lose the sign-in.
+  const toLogin = { pathname: '/login', search: location.search, hash: location.hash };
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionError, setSessionError] = useState(null);
@@ -260,7 +263,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -287,7 +290,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -314,7 +317,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -336,7 +339,7 @@ function AppContent() {
                   }))} />
                 </main>
               </>
-            ) : <Navigate to="/login" replace />
+            ) : <Navigate to={toLogin} replace />
           }
         />
         <Route
@@ -362,7 +365,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -387,7 +390,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -409,7 +412,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -432,7 +435,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -455,7 +458,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -482,7 +485,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -505,7 +508,7 @@ function AppContent() {
                 </main>
               </>
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to={toLogin} replace />
             )
           }
         />
@@ -532,8 +535,8 @@ function AppContent() {
         />
 
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to={toLogin} replace />} />
+        <Route path="*" element={<Navigate to={toLogin} replace />} />
       </Routes>
       {selectedCertificate && <CertificateDownload key={selectedCertificate.id} cert={selectedCertificate} onClose={() => setSelectedCertId(null)} />}
     </>
